@@ -29,8 +29,6 @@ static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 struct peripheral_status_state {
     bool connected;
 };
-/* LƯU CANVAS WPM – CHỈ 1 WIDGET */
-static lv_obj_t *wpm_canvas2;
 
 struct wpm_status_state {
     uint8_t wpm;
@@ -58,53 +56,13 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     rotate_canvas(canvas, cbuf);
 }
 
-
-/* ================================================================== */
-/* DRAW WPM: vẽ lên canvas đã lưu */
-static void draw_wpm2(lv_color_t cbuf[], const struct status_state *state) {
-    if (!wpm_canvas2) return;  // an toàn
-
-    lv_draw_label_dsc_t label_dsc_wpm;
-    init_label_dsc(&label_dsc_wpm, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_RIGHT);
-    lv_draw_rect_dsc_t rect_black_dsc, rect_white_dsc;
-    init_rect_dsc(&rect_black_dsc, LVGL_BACKGROUND);
-    init_rect_dsc(&rect_white_dsc, LVGL_FOREGROUND);
-    lv_draw_line_dsc_t line_dsc;
-    init_line_dsc(&line_dsc, LVGL_FOREGROUND, 1);
-
-    // Xóa nền
-    lv_canvas_draw_rect(wpm_canvas2, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &rect_black_dsc);
-
-    // Viền + ô trong
-    lv_canvas_draw_rect(wpm_canvas2, 0, 21, 68, 42, &rect_white_dsc);
-    lv_canvas_draw_rect(wpm_canvas2, 1, 22, 66, 40, &rect_black_dsc);
-
-    // Số WPM
-    char wpm_text[6] = {};
-    snprintf(wpm_text, sizeof(wpm_text), "%d", state->wpm[9]);
-    lv_canvas_draw_text(wpm_text, 42, 52, 24, &label_dsc_wpm, wpm_text);
-
-    // Tính min/max
-    int max = 0, min = 256;
-    for (int i = 0; i < 10; i++) {
-        if (state->wpm[i] > max) max = state->wpm[i];
-        if (state->wpm[i] < min) min = state->wpm[i];
-    }
-    int range = max - min ? max - min : 1;
-
-    // Vẽ đồ thị
-    lv_point_t points[10];
-    for (int i = 0; i < 10; i++) {
-        points[i].x = 2 + i * 7;
-        points[i].y = 60 - (state->wpm[i] - min) * 36 / range;
-    }
-    lv_canvas_draw_line(wpm_canvas2, points, 10, &line_dsc);
-
-    // Xoay canvas
-    rotate_canvas(wpm_canvas2, cbuf);
-}
 static void draw_wpm(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 1);
+    
+    if (!canvas) {
+        LOG_ERR("WPM canvas not found!");
+        return;
+    }
 
     lv_draw_label_dsc_t label_dsc_wpm;
     init_label_dsc(&label_dsc_wpm, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_RIGHT);
@@ -115,17 +73,19 @@ static void draw_wpm(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     lv_draw_line_dsc_t line_dsc;
     init_line_dsc(&line_dsc, LVGL_FOREGROUND, 1);
 
-    // Fill background
+    // Fill background (đen)
     lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &rect_black_dsc);
 
-    // Draw WPM widget border và inner box
+    // Draw WPM widget border (trắng) và inner box (đen)
     lv_canvas_draw_rect(canvas, 0, 21, 68, 42, &rect_white_dsc);
     lv_canvas_draw_rect(canvas, 1, 22, 66, 40, &rect_black_dsc);
 
-    // Draw WPM number
+    // Draw WPM number (trắng)
     char wpm_text[6] = {};
     snprintf(wpm_text, sizeof(wpm_text), "%d", state->wpm[9]);
     lv_canvas_draw_text(canvas, 42, 52, 24, &label_dsc_wpm, wpm_text);
+
+    LOG_DBG("Drawing WPM: %d", state->wpm[9]);
 
     // Calculate min/max for graph scaling
     int max = 0;
@@ -145,7 +105,7 @@ static void draw_wpm(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
         range = 1;
     }
 
-    // Draw graph line
+    // Draw graph line (trắng)
     lv_point_t points[10];
     for (int i = 0; i < 10; i++) {
         points[i].x = 2 + i * 7;
@@ -218,7 +178,10 @@ static void set_wpm_status(struct zmk_widget_status *widget, struct wpm_status_s
     }
     widget->state.wpm[9] = state.wpm;
 
-    //draw_wpm(widget->obj, widget->cbuf2, &widget->state);
+    LOG_DBG("Received WPM from central: %d", state.wpm);
+
+    // Vẽ lại WPM widget
+    draw_wpm(widget->obj, widget->cbuf2, &widget->state);
 }
 
 static void wpm_status_update_cb(struct wpm_status_state state) {
@@ -244,12 +207,9 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
-    /* Canvas WPM */
-    wpm_canvas2 = lv_canvas_create(widget->obj);
-    
     // WPM canvas - thay thế art image
     lv_obj_t *wpm_canvas = lv_canvas_create(widget->obj);
-    lv_obj_align(wpm_canvas, LV_ALIGN_TOP_LEFT, -48, 0);  // Giữ nguyên -48
+    lv_obj_align(wpm_canvas, LV_ALIGN_TOP_LEFT, -48, 0);
     lv_canvas_set_buffer(wpm_canvas, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     // Khởi tạo state
@@ -257,9 +217,9 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->state.charging = false;
     widget->state.connected = false;
     
-    // Khởi tạo mảng WPM với một số giá trị test để dễ thấy
+    // Khởi tạo mảng WPM với giá trị test để dễ thấy
     for (int i = 0; i < 10; i++) {
-        widget->state.wpm[i] = 0;
+        widget->state.wpm[i] = 20 + i * 5;  // 20, 25, 30, 35, 40, 45, 50, 55, 60, 65
     }
 
     sys_slist_append(&widgets, &widget->node);
@@ -269,9 +229,9 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
 
     // Vẽ cả 2 canvas lần đầu
     draw_top(widget->obj, widget->cbuf, &widget->state);
-    //draw_wpm(widget->obj, widget->cbuf2, &widget->state);
-    for (int i = 0; i < 10; i++) widget->state.wpm[i] = 20 + i * 5;
-    //draw_wpm2(widget->cbuf2, &widget->state);
+    draw_wpm(widget->obj, widget->cbuf2, &widget->state);
+
+    LOG_INF("Peripheral WPM widget initialized with test values");
 
     return 0;
 }
