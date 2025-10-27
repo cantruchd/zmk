@@ -148,7 +148,7 @@ static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status
 
     // Draw circles
     int circle_offsets[NICEVIEW_PROFILE_COUNT][2] = {
-        {13, 45}, {55, 45}, {34, 66}, {13, 87}, {55, 87},
+        {13, 45}, {55, 45}, {34, 62}, {13, 79}, {55, 79},
     };
 
     for (int i = 0; i < NICEVIEW_PROFILE_COUNT; i++) {
