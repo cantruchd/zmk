@@ -3,33 +3,35 @@
  *
  * SPDX-License-Identifier: MIT
  */
+
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include <zmk/event_manager.h>
 #include <zmk/events/wpm_state_changed.h>
 #include <zmk/events/split_wpm_state_changed.h>
-#include <zmk/split/bluetooth/service.h>  // ← THÊM ĐỂ ACCESS SPLIT SERVICE
 #include <zmk/wpm.h>
 
-// Define custom message ID for WPM
-#define ZMK_SPLIT_RUN_BEHAVIOR_PAYLOAD_WPM 0xF0  // Custom ID, chọn số chưa dùng
+#if IS_ENABLED(CONFIG_ZMK_SPLIT)
 
-// CENTRAL: Gửi WPM qua BLE
+// ============================================================================
+// CENTRAL: Gửi WPM tới peripherals
+// ============================================================================
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+
+#include <zmk/split/central.h>
 
 static int wpm_state_changed_listener(const zmk_event_t *eh) {
     uint8_t wpm = zmk_wpm_get_state();
     
-    LOG_INF("Central broadcasting WPM: %d", wpm);
+    LOG_INF("Central WPM changed: %d - Broadcasting to peripherals", wpm);
     
-    // Gửi qua split service
-    uint8_t data[2] = {ZMK_SPLIT_RUN_BEHAVIOR_PAYLOAD_WPM, wpm};
-    
-    int err = zmk_split_bt_position_pressed(data, sizeof(data));
-    if (err) {
-        LOG_ERR("Failed to send WPM to peripheral: %d", err);
+    // Gửi WPM tới tất cả peripherals qua split transport
+    int err = zmk_split_central_send_wpm(wpm);
+    if (err < 0) {
+        LOG_ERR("Failed to send WPM to peripherals: %d", err);
     }
     
     return ZMK_EV_EVENT_BUBBLE;
@@ -38,25 +40,30 @@ static int wpm_state_changed_listener(const zmk_event_t *eh) {
 ZMK_LISTENER(wpm_split_central, wpm_state_changed_listener);
 ZMK_SUBSCRIPTION(wpm_split_central, zmk_wpm_state_changed);
 
-#endif // CONFIG_ZMK_SPLIT_ROLE_CENTRAL
+#endif // IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
 
-// PERIPHERAL: Nhận WPM từ central
+// ============================================================================
+// PERIPHERAL: Nhận WPM từ central (nếu cần xử lý thêm)
+// ============================================================================
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)
 
-// Handler để nhận data từ central
-int zmk_split_wpm_position_handler(uint8_t *data, uint8_t len) {
-    if (len < 2) return -EINVAL;
-    if (data[0] != ZMK_SPLIT_RUN_BEHAVIOR_PAYLOAD_WPM) return 0;
+// Event zmk_split_wpm_state_changed đã được raise trong central.c
+// Peripheral widget sẽ subscribe trực tiếp vào event này
+// File này chỉ cần tồn tại để compile, không cần xử lý gì thêm
+
+static int wpm_split_peripheral_listener(const zmk_event_t *eh) {
+    const struct zmk_split_wpm_state_changed *ev = as_zmk_split_wpm_state_changed(eh);
     
-    uint8_t wpm = data[1];
-    LOG_INF("Peripheral received WPM from central: %d", wpm);
+    if (ev) {
+        LOG_INF("Peripheral received WPM from central: %d", ev->wpm);
+    }
     
-    // Raise local event để update display
-    raise_zmk_split_wpm_state_changed(
-        (struct zmk_split_wpm_state_changed){.wpm = wpm}
-    );
-    
-    return 0;
+    return ZMK_EV_EVENT_BUBBLE;
 }
 
-#endif // CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL
+ZMK_LISTENER(wpm_split_peripheral, wpm_split_peripheral_listener);
+ZMK_SUBSCRIPTION(wpm_split_peripheral, zmk_split_wpm_state_changed);
+
+#endif // IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)
+
+#endif // IS_ENABLED(CONFIG_ZMK_SPLIT)
