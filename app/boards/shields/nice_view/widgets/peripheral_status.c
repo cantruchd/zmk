@@ -224,7 +224,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     // ÉP TOP LÊN TRÊN CÙNG
-    lv_obj_move_to_foreground(wpm);  // ← QUAN TRỌNG
+    lv_obj_move_to_foreground(wpm_canvas);  // ← QUAN TRỌNG
 
 
     widget->state.battery = 0;
