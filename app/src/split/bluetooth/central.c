@@ -1110,20 +1110,16 @@ void split_central_split_run_callback(struct k_work *work) {
 
             uint8_t wpm = payload_wrapper.cmd.data.send_wpm.wpm;
             
-            // Tìm index của WPM characteristic trong service
-            // Cần đếm từ service definition, giả sử WPM là attribute cuối cùng
-            // attrs[0]: Service, attrs[1]: Position State value, attrs[2]: Position CCC,
-            // attrs[3]: Run Behavior, attrs[4]: Descriptor, attrs[5-6]: Sensor (nếu có),
-            // Phụ thuộc vào config, có thể khác nhau
-            // Cách an toàn nhất: dùng handle đã discover
-            
-            int err = bt_gatt_notify(peripherals[payload_wrapper.source].conn,
-                                    NULL,  // Dùng NULL để Zephyr tự tìm attribute by handle
-                                    &wpm, 
-                                    sizeof(wpm));
+            // Central WRITE vào peripheral (không phải notify)
+            int err = bt_gatt_write_without_response(
+                peripherals[payload_wrapper.source].conn,
+                peripherals[payload_wrapper.source].wpm_handle,
+                &wpm,
+                sizeof(wpm),
+                true);
 
             if (err) {
-                LOG_ERR("Failed to notify WPM to peripheral %d (err %d)", 
+                LOG_ERR("Failed to write WPM to peripheral %d (err %d)", 
                         payload_wrapper.source, err);
             } else {
                 LOG_DBG("Sent WPM %d to peripheral %d", wpm, payload_wrapper.source);
