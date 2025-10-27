@@ -223,8 +223,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
-    // ÉP TOP LÊN TRÊN CÙNG
-    lv_obj_move_to_foreground(wpm_canvas);  // ← QUAN TRỌNG
+  
 
 
     widget->state.battery = 0;
@@ -239,9 +238,9 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget_battery_status_init();
     widget_peripheral_status_init();
     widget_wpm_status_init();
-
-    draw_wpm(widget->obj, widget->cbuf2, &widget->state);
     draw_top(widget->obj, widget->cbuf, &widget->state);
+    draw_wpm(widget->obj, widget->cbuf2, &widget->state);
+   
 
     LOG_INF("Peripheral WPM widget initialized with graph + black background");
     return 0;
