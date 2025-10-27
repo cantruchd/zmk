@@ -20,6 +20,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/events/endpoint_changed.h>
 #include <zmk/events/wpm_state_changed.h>
 #include <zmk/events/layer_state_changed.h>
+#include <zmk/events/split_wpm_state_changed.h>  // <-- THÊM ĐỂ SỬ DỤNG EVENT
 #include <zmk/usb.h>
 #include <zmk/ble.h>
 #include <zmk/endpoints.h>
@@ -87,39 +88,40 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     }
 
     lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &label_dsc, output_text);
-    #if !IS_ENABLED(CONFIG_NICE_VIEW_BATTERY_SHOW_BIG_PERCENTAGE)
-        // Draw WPM
-        lv_canvas_draw_rect(canvas, 0, 21, 68, 42, &rect_white_dsc);
-        lv_canvas_draw_rect(canvas, 1, 22, 66, 40, &rect_black_dsc);
     
-        char wpm_text[6] = {};
-        snprintf(wpm_text, sizeof(wpm_text), "%d", state->wpm[9]);
-        lv_canvas_draw_text(canvas, 42, 52, 24, &label_dsc_wpm, wpm_text);
+    // #if !IS_ENABLED(CONFIG_NICE_VIEW_BATTERY_SHOW_BIG_PERCENTAGE)
+    //     // Draw WPM
+    //     lv_canvas_draw_rect(canvas, 0, 21, 68, 42, &rect_white_dsc);
+    //     lv_canvas_draw_rect(canvas, 1, 22, 66, 40, &rect_black_dsc);
     
-        int max = 0;
-        int min = 256;
+    //     char wpm_text[6] = {};
+    //     snprintf(wpm_text, sizeof(wpm_text), "%d", state->wpm[9]);
+    //     lv_canvas_draw_text(canvas, 42, 52, 24, &label_dsc_wpm, wpm_text);
     
-        for (int i = 0; i < 10; i++) {
-            if (state->wpm[i] > max) {
-                max = state->wpm[i];
-            }
-            if (state->wpm[i] < min) {
-                min = state->wpm[i];
-            }
-        }
+    //     int max = 0;
+    //     int min = 256;
     
-        int range = max - min;
-        if (range == 0) {
-            range = 1;
-        }
+    //     for (int i = 0; i < 10; i++) {
+    //         if (state->wpm[i] > max) {
+    //             max = state->wpm[i];
+    //         }
+    //         if (state->wpm[i] < min) {
+    //             min = state->wpm[i];
+    //         }
+    //     }
     
-        lv_point_t points[10];
-        for (int i = 0; i < 10; i++) {
-            points[i].x = 2 + i * 7;
-            points[i].y = 60 - (state->wpm[i] - min) * 36 / range;
-        }
-        lv_canvas_draw_line(canvas, points, 10, &line_dsc);
-    #endif
+    //     int range = max - min;
+    //     if (range == 0) {
+    //         range = 1;
+    //     }
+    
+    //     lv_point_t points[10];
+    //     for (int i = 0; i < 10; i++) {
+    //         points[i].x = 2 + i * 7;
+    //         points[i].y = 60 - (state->wpm[i] - min) * 36 / range;
+    //     }
+    //     lv_canvas_draw_line(canvas, points, 10, &line_dsc);
+    // #endif
 
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
@@ -308,6 +310,17 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_layer_status, struct layer_status_state, laye
 
 ZMK_SUBSCRIPTION(widget_layer_status, zmk_layer_state_changed);
 
+// // === GỬI WPM TỪ CENTRAL SANG PERIPHERAL ===
+// // #if IS_ENABLED(CONFIG_ZMK_SPLIT)
+// static void send_wpm_to_peripheral(struct wpm_status_state state) {
+//     if (zmk_split_is_central()) {
+//         raise_zmk_split_wpm_state_changed((struct zmk_split_wpm_state_changed){
+//             .wpm = state.wpm
+//         });
+//     }
+// }
+// // #endif
+
 static void set_wpm_status(struct zmk_widget_status *widget, struct wpm_status_state state) {
     for (int i = 0; i < 9; i++) {
         widget->state.wpm[i] = widget->state.wpm[i + 1];
@@ -315,6 +328,14 @@ static void set_wpm_status(struct zmk_widget_status *widget, struct wpm_status_s
     widget->state.wpm[9] = state.wpm;
 
     draw_top(widget->obj, widget->cbuf, &widget->state);
+
+    #if IS_ENABLED(CONFIG_ZMK_SPLIT)
+    if (!IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)) {
+        raise_zmk_split_wpm_state_changed((struct zmk_split_wpm_state_changed){
+            .wpm = state.wpm  // ← SỬA: current_wpm
+        });
+    }
+    #endif
 }
 
 static void wpm_status_update_cb(struct wpm_status_state state) {

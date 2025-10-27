@@ -8,10 +8,9 @@
 
 #include <zephyr/kernel.h>
 #include <zmk/event_manager.h>
-#include <zmk/wpm.h>
 
 struct zmk_wpm_state_changed {
-    int state;
+    uint8_t state;
 };
 
 ZMK_EVENT_DECLARE(zmk_wpm_state_changed);

@@ -18,6 +18,7 @@
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/position_state_changed.h>
 #include <zmk/events/sensor_event.h>
+#include <zmk/events/split_wpm_state_changed.h>  // ← THÊM
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -72,6 +73,15 @@ int zmk_split_transport_central_peripheral_event_handler(
 
         return raise_zmk_sensor_event(sensor_ev);
     }
+    case ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_WPM_EVENT: {  // ← THÊM CASE MỚI
+        LOG_INF("Central received WPM from peripheral: %d", ev.data.wpm_event.wpm);
+        
+        struct zmk_split_wpm_state_changed wpm_ev = {
+            .wpm = ev.data.wpm_event.wpm
+        };
+        
+        return raise_zmk_split_wpm_state_changed(wpm_ev);
+    }
     default:
         LOG_WRN("GOT AN UNKNOWN EVENT TYPE %d", ev.type);
         return -ENOTSUP;
@@ -109,6 +119,45 @@ int zmk_split_central_invoke_behavior(uint8_t source, struct zmk_behavior_bindin
 
     return active_transport->api->send_command(source, command);
 };
+
+// ← THÊM HÀM MỚI
+int zmk_split_central_send_wpm(uint8_t wpm) {
+    if (!active_transport || !active_transport->api || !active_transport->api->send_command) {
+        return -ENODEV;
+    }
+
+    if (!active_transport->api->get_available_source_ids) {
+        return -ENOTSUP;
+    }
+
+    uint8_t source_ids[ZMK_SPLIT_CENTRAL_PERIPHERAL_COUNT];
+    int ret = active_transport->api->get_available_source_ids(source_ids);
+
+    if (ret < 0) {
+        return ret;
+    }
+
+    struct zmk_split_transport_central_command command = {
+        .type = ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SEND_WPM,
+        .data = {
+            .send_wpm = {
+                .wpm = wpm,
+            },
+        },
+    };
+
+    // Gửi tới tất cả peripherals
+    for (size_t i = 0; i < ret; i++) {
+        int err = active_transport->api->send_command(source_ids[i], command);
+        if (err < 0) {
+            LOG_WRN("Failed to send WPM to peripheral %d: %d", source_ids[i], err);
+        } else {
+            LOG_DBG("Sent WPM %d to peripheral %d", wpm, source_ids[i]);
+        }
+    }
+
+    return 0;
+}
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
 

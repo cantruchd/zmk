@@ -46,3 +46,10 @@ int zmk_split_central_update_hid_indicator(zmk_hid_indicators_t indicators);
 int zmk_split_central_get_peripheral_battery_level(uint8_t source, uint8_t *level);
 
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
+
+/**
+ * Send WPM value to all connected peripherals
+ * @param wpm Words per minute value (0-255)
+ * @return 0 on success, negative error code on failure
+ */
+int zmk_split_central_send_wpm(uint8_t wpm);  // ← THÊM DÒNG NÀY

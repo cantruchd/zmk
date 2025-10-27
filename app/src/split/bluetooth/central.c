@@ -60,6 +60,7 @@ struct peripheral_slot {
     uint16_t update_hid_indicators;
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
     uint16_t selected_physical_layout_handle;
+    uint16_t wpm_handle;  // ← THÊM
     uint8_t position_state[POSITION_STATE_DATA_LEN];
     uint8_t changed_positions[POSITION_STATE_DATA_LEN];
 };
@@ -216,6 +217,7 @@ int release_peripheral_slot(int index) {
     slot->subscribe_params.value_handle = 0;
     slot->run_behavior_handle = 0;
     slot->selected_physical_layout_handle = 0;
+    slot->wpm_handle = 0;  // ← THÊM
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
     slot->update_hid_indicators = 0;
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
@@ -609,6 +611,13 @@ static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
             slot->discover_params.uuid = NULL;
             slot->discover_params.start_handle = attr->handle + 2;
             slot->run_behavior_handle = bt_gatt_attr_value_handle(attr);
+        } else if (bt_uuid_cmp(chrc_uuid,  // ← THÊM WPM DISCOVERY
+                               BT_UUID_DECLARE_128(ZMK_SPLIT_BT_CHAR_WPM_UUID)) == 0) {
+            LOG_DBG("Found WPM characteristic handle");
+            slot->wpm_handle = bt_gatt_attr_value_handle(attr);
+            slot->discover_params.uuid = NULL;
+            slot->discover_params.start_handle = attr->handle + 2;
+            slot->discover_params.type = BT_GATT_DISCOVER_CHARACTERISTIC;
         } else if (!bt_uuid_cmp(((struct bt_gatt_chrc *)attr->user_data)->uuid,
                                 BT_UUID_DECLARE_128(ZMK_SPLIT_BT_SELECT_PHYS_LAYOUT_UUID))) {
             LOG_DBG("Found select physical layout handle");
@@ -686,7 +695,7 @@ static uint8_t split_central_chrc_discovery_func(struct bt_conn *conn,
     }
 
     bool subscribed = slot->run_behavior_handle && slot->subscribe_params.value_handle &&
-                      slot->selected_physical_layout_handle;
+                      slot->selected_physical_layout_handle && slot->wpm_handle;  // ← THÊM && slot->wpm_handle
 
 #if ZMK_KEYMAP_HAS_SENSORS
     subscribed = subscribed && slot->sensor_subscribe_params.value_handle;
@@ -966,10 +975,6 @@ static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {
 
     k_msgq_put(&peripheral_event_msgq, &ev, K_NO_WAIT);
     k_work_submit(&peripheral_event_work);
-    // struct zmk_peripheral_battery_state_changed ev = {
-    //     .source = peripheral_slot_index_for_conn(conn), .state_of_charge = 0};
-    // k_msgq_put(&peripheral_batt_lvl_msgq, &ev, K_NO_WAIT);
-    // k_work_submit(&peripheral_batt_lvl_work);
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
 
 #if IS_ENABLED(CONFIG_ZMK_INPUT_SPLIT)
@@ -1097,6 +1102,30 @@ void split_central_split_run_callback(struct k_work *work) {
             }
             break;
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_PERIPHERAL_HID_INDICATORS)
+        case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SEND_WPM: {  // ← THÊM CASE MỚI
+            if (peripherals[payload_wrapper.source].wpm_handle == 0) {
+                LOG_ERR("WPM handle not found for peripheral %d", payload_wrapper.source);
+                continue;
+            }
+
+            uint8_t wpm = payload_wrapper.cmd.data.send_wpm.wpm;
+            
+            // Central WRITE vào peripheral (không phải notify)
+            int err = bt_gatt_write_without_response(
+                peripherals[payload_wrapper.source].conn,
+                peripherals[payload_wrapper.source].wpm_handle,
+                &wpm,
+                sizeof(wpm),
+                true);
+
+            if (err) {
+                LOG_ERR("Failed to write WPM to peripheral %d (err %d)", 
+                        payload_wrapper.source, err);
+            } else {
+                LOG_DBG("Sent WPM %d to peripheral %d", wpm, payload_wrapper.source);
+            }
+            break;
+        }
         default:
             LOG_WRN("Unsupported wrapped central command type %d", payload_wrapper.cmd.type);
             return;
@@ -1180,7 +1209,8 @@ static int split_central_bt_send_command(uint8_t source,
     switch (cmd.type) {
     case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SET_HID_INDICATORS:
     case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SET_PHYSICAL_LAYOUT:
-    case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_INVOKE_BEHAVIOR: {
+    case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_INVOKE_BEHAVIOR:
+    case ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_SEND_WPM: {  // ← THÊM CASE
         struct central_cmd_wrapper wrapper = {.source = source, .cmd = cmd};
         return split_bt_invoke_behavior_payload(wrapper);
     }
