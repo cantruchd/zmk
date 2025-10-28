@@ -238,8 +238,8 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget_battery_status_init();
     widget_peripheral_status_init();
     widget_wpm_status_init();
-    draw_top(widget->obj, widget->cbuf, &widget->state);
-    draw_wpm(widget->obj, widget->cbuf2, &widget->state);
+    // draw_top(widget->obj, widget->cbuf, &widget->state);
+    // draw_wpm(widget->obj, widget->cbuf2, &widget->state);
    
 
     LOG_INF("Peripheral WPM widget initialized with graph + black background");
