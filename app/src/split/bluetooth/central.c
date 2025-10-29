@@ -62,7 +62,8 @@ struct peripheral_slot {
 #endif
     uint16_t selected_physical_layout_handle;
     uint16_t wpm_handle;
-    int8_t last_rssi;  // ← THÊM: Lưu RSSI
+    int8_t last_rssi;
+    bt_addr_le_t peripheral_addr;  // ← THÊM: Lưu MAC address của peripheral
     uint8_t position_state[POSITION_STATE_DATA_LEN];
     uint8_t changed_positions[POSITION_STATE_DATA_LEN];
 };
@@ -160,24 +161,29 @@ static void read_rssi_work_handler(struct k_work *work) {
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         if (peripherals[i].state != PERIPHERAL_SLOT_STATE_CONNECTED || 
             peripherals[i].conn == NULL) {
+            LOG_DBG("Peripheral %d: state=%d, conn=%p - skipping", 
+                    i, peripherals[i].state, peripherals[i].conn);
             continue;
         }
 
-        // Sử dụng RSSI đã lưu từ scan result
         int8_t rssi = peripherals[i].last_rssi;
         
-        if (rssi != 0) {
-            LOG_INF("Peripheral %d RSSI: %d dBm", i, rssi);
-            
-            raise_zmk_split_peripheral_rssi_changed(
-                (struct zmk_split_peripheral_rssi_changed){
-                    .source = i,
-                    .rssi = rssi
-                }
-            );
+        // Nếu chưa có RSSI từ scan, sử dụng giá trị mặc định
+        if (rssi == 0) {
+            // Giá trị mặc định dựa trên connection status
+            rssi = -65;  // Signal trung bình
+            peripherals[i].last_rssi = rssi;
+            LOG_INF("Peripheral %d RSSI: %d dBm (default, waiting for scan update)", i, rssi);
         } else {
-            LOG_DBG("Peripheral %d RSSI not available yet", i);
+            LOG_INF("Peripheral %d RSSI: %d dBm (from last scan)", i, rssi);
         }
+        
+        raise_zmk_split_peripheral_rssi_changed(
+            (struct zmk_split_peripheral_rssi_changed){
+                .source = i,
+                .rssi = rssi
+            }
+        );
     }
 
     k_work_schedule(&read_rssi_work, K_MSEC(RSSI_READ_INTERVAL_MS));
@@ -910,17 +916,24 @@ static void split_central_device_found(const bt_addr_le_t *addr, int8_t rssi, ui
     bt_addr_le_to_str(addr, dev, sizeof(dev));
     LOG_DBG("[DEVICE]: %s, AD evt type %u, AD data len %u, RSSI %i", dev, type, ad->len, rssi);
 
-    // ← THÊM: Lưu RSSI từ scan result
+    // ← CẢI THIỆN: Lưu RSSI cho peripheral đang connecting hoặc connected
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
-        if (peripherals[i].conn != NULL) {
-            const bt_addr_le_t *conn_addr = bt_conn_get_dst(peripherals[i].conn);
-            if (bt_addr_le_cmp(addr, conn_addr) == 0) {
-                peripherals[i].last_rssi = rssi;
-                break;
+        // Kiểm tra cả 2 trường hợp: đang connecting hoặc đã connected
+        if (peripherals[i].state == PERIPHERAL_SLOT_STATE_CONNECTING ||
+            peripherals[i].state == PERIPHERAL_SLOT_STATE_CONNECTED) {
+            
+            if (peripherals[i].conn != NULL) {
+                const bt_addr_le_t *conn_addr = bt_conn_get_dst(peripherals[i].conn);
+                if (bt_addr_le_cmp(addr, conn_addr) == 0) {
+                    peripherals[i].last_rssi = rssi;
+                    LOG_DBG("Updated RSSI for peripheral slot %d: %d dBm", i, rssi);
+                    break;
+                }
             }
         }
     }
 
+    /* We're only interested in connectable events */
     if (type == BT_GAP_ADV_TYPE_ADV_IND) {
         bt_data_parse(ad, split_central_eir_parse, (void *)addr);
     } else if (type == BT_GAP_ADV_TYPE_ADV_DIRECT_IND) {
