@@ -161,8 +161,8 @@ static void read_rssi_work_handler(struct k_work *work) {
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         if (peripherals[i].state != PERIPHERAL_SLOT_STATE_CONNECTED || 
             peripherals[i].conn == NULL) {
-            LOG_DBG("Peripheral %d: state=%d, conn=%p - skipping", 
-                    i, peripherals[i].state, peripherals[i].conn);
+            // ← SỬA: Bỏ print pointer, chỉ log state
+            LOG_DBG("Peripheral %d: state=%d - skipping", i, peripherals[i].state);
             continue;
         }
 
