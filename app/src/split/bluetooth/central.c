@@ -843,21 +843,21 @@ static bool split_central_eir_found(const bt_addr_le_t *addr) {
     }
     struct peripheral_slot *slot = &peripherals[slot_idx];
 
-    // ← THAY ĐỔI: KHÔNG stop scan (giữ scan để lấy RSSI liên tục)
-    // int err = stop_scanning();
-    // if (err < 0) {
-    //     return false;
-    // }
+    // ← KHÔI PHỤC: Phải stop scan trước khi connect
+    int err = stop_scanning();
+    if (err < 0) {
+        return false;
+    }
 
     LOG_DBG("Initiating new connection");
     struct bt_le_conn_param *param =
         BT_LE_CONN_PARAM(CONFIG_ZMK_SPLIT_BLE_PREF_INT, CONFIG_ZMK_SPLIT_BLE_PREF_INT,
                          CONFIG_ZMK_SPLIT_BLE_PREF_LATENCY, CONFIG_ZMK_SPLIT_BLE_PREF_TIMEOUT);
-    int err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, param, &slot->conn);
+    err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, param, &slot->conn);
     if (err < 0) {
         LOG_ERR("Create conn failed (err %d) (create conn? 0x%04x)", err, BT_HCI_OP_LE_CREATE_CONN);
         release_peripheral_slot(slot_idx);
-        // start_scanning();  // Không cần restart vì không stop
+        start_scanning();
     }
 
     return false;
@@ -939,21 +939,30 @@ static int start_scanning(void) {
         return 0;
     }
 
-    // ← THAY ĐỔI: Cho phép scan ngay cả khi đã kết nối (để lấy RSSI)
-    // Comment out phần check này
-    /*
-    bool has_unconnected = false;
+    // ← THAY ĐỔI: Luôn scan để lấy RSSI, ngay cả khi đã kết nối
+    // Nhưng chỉ scan nếu có ít nhất 1 peripheral đã connected
+    bool has_connected = false;
     for (int i = 0; i < CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS; i++) {
-        if (peripherals[i].conn == NULL) {
-            has_unconnected = true;
+        if (peripherals[i].state == PERIPHERAL_SLOT_STATE_CONNECTED) {
+            has_connected = true;
             break;
         }
     }
-    if (!has_unconnected) {
-        LOG_DBG("All devices are connected, scanning is unnecessary");
-        return 0;
+
+    // Nếu chưa có gì connected, kiểm tra có peripheral chưa connect không
+    if (!has_connected) {
+        bool has_unconnected = false;
+        for (int i = 0; i < CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS; i++) {
+            if (peripherals[i].conn == NULL) {
+                has_unconnected = true;
+                break;
+            }
+        }
+        if (!has_unconnected) {
+            LOG_DBG("No peripherals to connect or monitor");
+            return 0;
+        }
     }
-    */
 
     is_scanning = true;
     int err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, split_central_device_found);
@@ -965,6 +974,13 @@ static int start_scanning(void) {
     LOG_DBG("Scanning successfully started");
     return 0;
 }
+
+// ← THÊM: Work để restart scan sau khi connected
+static void restart_scan_work_handler(struct k_work *work) {
+    start_scanning();
+}
+
+K_WORK_DELAYABLE_DEFINE(restart_scan_work, restart_scan_work_handler);
 
 static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {
     char addr[BT_ADDR_LE_STR_LEN];
@@ -993,6 +1009,9 @@ static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {
     confirm_peripheral_slot_conn(conn);
     split_central_process_connection(conn);
     k_work_submit(&notify_status_work);
+    
+    // ← THÊM: Restart scan sau 2s để lấy RSSI từ advertising
+    k_work_schedule(&restart_scan_work, K_MSEC(2000));
 }
 
 static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {
