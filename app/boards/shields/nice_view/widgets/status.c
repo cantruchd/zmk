@@ -20,7 +20,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/events/endpoint_changed.h>
 #include <zmk/events/wpm_state_changed.h>
 #include <zmk/events/layer_state_changed.h>
-#include <zmk/events/split_wpm_state_changed.h>  // <-- THÊM ĐỂ SỬ DỤNG EVENT
+#include <zmk/events/split_wpm_state_changed.h>
+#include <zmk/events/split_peripheral_rssi_changed.h>  // ← THÊM
 #include <zmk/usb.h>
 #include <zmk/ble.h>
 #include <zmk/endpoints.h>
@@ -47,6 +48,11 @@ struct wpm_status_state {
     uint8_t wpm;
 };
 
+// ← THÊM: RSSI status state
+struct rssi_status_state {
+    int8_t rssi[ZMK_SPLIT_BLE_PERIPHERAL_COUNT];
+};
+
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 0);
 
@@ -54,6 +60,8 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     init_label_dsc(&label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_RIGHT);
     lv_draw_label_dsc_t label_dsc_wpm;
     init_label_dsc(&label_dsc_wpm, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_RIGHT);
+    lv_draw_label_dsc_t label_dsc_small;  // ← THÊM: Font nhỏ cho RSSI
+    init_label_dsc(&label_dsc_small, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_LEFT);
     lv_draw_rect_dsc_t rect_black_dsc;
     init_rect_dsc(&rect_black_dsc, LVGL_BACKGROUND);
     lv_draw_rect_dsc_t rect_white_dsc;
@@ -89,39 +97,17 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
 
     lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &label_dsc, output_text);
     
-    // #if !IS_ENABLED(CONFIG_NICE_VIEW_BATTERY_SHOW_BIG_PERCENTAGE)
-    //     // Draw WPM
-    //     lv_canvas_draw_rect(canvas, 0, 21, 68, 42, &rect_white_dsc);
-    //     lv_canvas_draw_rect(canvas, 1, 22, 66, 40, &rect_black_dsc);
-    
-    //     char wpm_text[6] = {};
-    //     snprintf(wpm_text, sizeof(wpm_text), "%d", state->wpm[9]);
-    //     lv_canvas_draw_text(canvas, 42, 52, 24, &label_dsc_wpm, wpm_text);
-    
-    //     int max = 0;
-    //     int min = 256;
-    
-    //     for (int i = 0; i < 10; i++) {
-    //         if (state->wpm[i] > max) {
-    //             max = state->wpm[i];
-    //         }
-    //         if (state->wpm[i] < min) {
-    //             min = state->wpm[i];
-    //         }
-    //     }
-    
-    //     int range = max - min;
-    //     if (range == 0) {
-    //         range = 1;
-    //     }
-    
-    //     lv_point_t points[10];
-    //     for (int i = 0; i < 10; i++) {
-    //         points[i].x = 2 + i * 7;
-    //         points[i].y = 60 - (state->wpm[i] - min) * 36 / range;
-    //     }
-    //     lv_canvas_draw_line(canvas, points, 10, &line_dsc);
-    // #endif
+    // ← THÊM: Hiển thị RSSI
+    #if IS_ENABLED(CONFIG_ZMK_SPLIT)
+    if (!IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)) {
+        // Chỉ hiển thị trên Central
+        char rssi_text[20] = {};
+        if (state->peripheral_rssi[0] != 0) {
+            snprintf(rssi_text, sizeof(rssi_text), "BT:%ddBm", state->peripheral_rssi[0]);
+            lv_canvas_draw_text(canvas, 2, 50, 66, &label_dsc_small, rssi_text);
+        }
+    }
+    #endif
 
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
@@ -148,7 +134,6 @@ static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status
 
     // Draw circles
     int circle_offsets[NICEVIEW_PROFILE_COUNT][2] = {
-        // {13, 45-64}, {55, 45-64}, {34, 62-64}, {13, 79-64}, {55, 79-64},
         {13, 13}, {55, 13}, {34, 34-6}, {13, 55-12}, {55, 55-12},
     };
 
@@ -212,7 +197,7 @@ static void set_battery_status(struct zmk_widget_status *widget,
                                struct battery_status_state state) {
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
     widget->state.charging = state.usb_present;
-#endif /* IS_ENABLED(CONFIG_USB_DEVICE_STACK) */
+#endif
 
     widget->state.battery = state.level;
 
@@ -231,7 +216,7 @@ static struct battery_status_state battery_status_get_state(const zmk_event_t *e
         .level = (ev != NULL) ? ev->state_of_charge : zmk_battery_state_of_charge(),
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
         .usb_present = zmk_usb_is_powered(),
-#endif /* IS_ENABLED(CONFIG_USB_DEVICE_STACK) */
+#endif
     };
 }
 
@@ -241,7 +226,7 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_battery_status, struct battery_status_state,
 ZMK_SUBSCRIPTION(widget_battery_status, zmk_battery_state_changed);
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 ZMK_SUBSCRIPTION(widget_battery_status, zmk_usb_conn_state_changed);
-#endif /* IS_ENABLED(CONFIG_USB_DEVICE_STACK) */
+#endif
 
 static void set_output_status(struct zmk_widget_status *widget,
                               const struct output_status_state *state) {
@@ -311,17 +296,6 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_layer_status, struct layer_status_state, laye
 
 ZMK_SUBSCRIPTION(widget_layer_status, zmk_layer_state_changed);
 
-// // === GỬI WPM TỪ CENTRAL SANG PERIPHERAL ===
-// // #if IS_ENABLED(CONFIG_ZMK_SPLIT)
-// static void send_wpm_to_peripheral(struct wpm_status_state state) {
-//     if (zmk_split_is_central()) {
-//         raise_zmk_split_wpm_state_changed((struct zmk_split_wpm_state_changed){
-//             .wpm = state.wpm
-//         });
-//     }
-// }
-// // #endif
-
 static void set_wpm_status(struct zmk_widget_status *widget, struct wpm_status_state state) {
     for (int i = 0; i < 9; i++) {
         widget->state.wpm[i] = widget->state.wpm[i + 1];
@@ -333,7 +307,7 @@ static void set_wpm_status(struct zmk_widget_status *widget, struct wpm_status_s
     #if IS_ENABLED(CONFIG_ZMK_SPLIT)
     if (!IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)) {
         raise_zmk_split_wpm_state_changed((struct zmk_split_wpm_state_changed){
-            .wpm = state.wpm  // ← SỬA: current_wpm
+            .wpm = state.wpm
         });
     }
     #endif
@@ -351,6 +325,36 @@ struct wpm_status_state wpm_status_get_state(const zmk_event_t *eh) {
 ZMK_DISPLAY_WIDGET_LISTENER(widget_wpm_status, struct wpm_status_state, wpm_status_update_cb,
                             wpm_status_get_state)
 ZMK_SUBSCRIPTION(widget_wpm_status, zmk_wpm_state_changed);
+
+// ← THÊM: RSSI Status Handler
+static void set_rssi_status(struct zmk_widget_status *widget, struct rssi_status_state state) {
+    for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
+        widget->state.peripheral_rssi[i] = state.rssi[i];
+    }
+
+    draw_top(widget->obj, widget->cbuf, &widget->state);
+}
+
+static void rssi_status_update_cb(struct rssi_status_state state) {
+    struct zmk_widget_status *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) { set_rssi_status(widget, state); }
+}
+
+static struct rssi_status_state rssi_status_get_state(const zmk_event_t *eh) {
+    const struct zmk_split_peripheral_rssi_changed *ev = as_zmk_split_peripheral_rssi_changed(eh);
+    
+    struct rssi_status_state state = {0};
+    
+    if (ev != NULL && ev->source < ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
+        state.rssi[ev->source] = ev->rssi;
+    }
+    
+    return state;
+}
+
+ZMK_DISPLAY_WIDGET_LISTENER(widget_rssi_status, struct rssi_status_state,
+                            rssi_status_update_cb, rssi_status_get_state)
+ZMK_SUBSCRIPTION(widget_rssi_status, zmk_split_peripheral_rssi_changed);
 
 int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
@@ -370,6 +374,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget_output_status_init();
     widget_layer_status_init();
     widget_wpm_status_init();
+    widget_rssi_status_init();  // ← THÊM
 
     return 0;
 }
