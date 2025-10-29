@@ -107,6 +107,11 @@ target_sources_ifdef(CONFIG_ZMK_SPLIT app PRIVATE src/events/split_wpm_state_cha
 if(CONFIG_ZMK_SPLIT AND (NOT CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL))
   target_sources(app PRIVATE src/events/split_peripheral_rssi_changed.c)
 endif()
+
+# Peripheral advertising cho RSSI monitoring - chỉ build cho peripheral role
+if(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)
+  target_sources(app PRIVATE src/split/bluetooth/peripheral_rssi_advertise.c)
+endif()
 # ==================================================
 
 add_subdirectory_ifdef(CONFIG_ZMK_SPLIT src/split)
