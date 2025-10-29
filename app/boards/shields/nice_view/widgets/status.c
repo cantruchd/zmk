@@ -60,8 +60,6 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     init_label_dsc(&label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_RIGHT);
     lv_draw_label_dsc_t label_dsc_wpm;
     init_label_dsc(&label_dsc_wpm, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_RIGHT);
-    lv_draw_label_dsc_t label_dsc_small;  // ← THÊM: Font nhỏ cho RSSI
-    init_label_dsc(&label_dsc_small, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_LEFT);
     lv_draw_rect_dsc_t rect_black_dsc;
     init_rect_dsc(&rect_black_dsc, LVGL_BACKGROUND);
     lv_draw_rect_dsc_t rect_white_dsc;
@@ -96,18 +94,6 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     }
 
     lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &label_dsc, output_text);
-    
-    // ← THÊM: Hiển thị RSSI
-    #if IS_ENABLED(CONFIG_ZMK_SPLIT)
-    if (!IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)) {
-        // Chỉ hiển thị trên Central
-        char rssi_text[20] = {};
-        if (state->peripheral_rssi[0] != 0) {
-            snprintf(rssi_text, sizeof(rssi_text), "BT:%ddBm", state->peripheral_rssi[0]);
-            lv_canvas_draw_text(canvas, 2, 50, 66, &label_dsc_small, rssi_text);
-        }
-    }
-    #endif
 
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
@@ -174,20 +160,54 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
     init_rect_dsc(&rect_black_dsc, LVGL_BACKGROUND);
     lv_draw_label_dsc_t label_dsc;
     init_label_dsc(&label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_CENTER);
+    lv_draw_label_dsc_t label_dsc_small;  // ← THÊM: Font nhỏ cho RSSI
+    init_label_dsc(&label_dsc_small, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_CENTER);
 
     // Fill background
     lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &rect_black_dsc);
 
-    // Draw layer
+    // ← THAY ĐỔI: Hiển thị Layer ở trên, RSSI ở dưới
+    #if IS_ENABLED(CONFIG_ZMK_SPLIT)
+    if (!IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)) {
+        // Central: Hiển thị Layer + RSSI
+        
+        // Draw layer (phía trên)
+        if (state->layer_label == NULL || strlen(state->layer_label) == 0) {
+            char text[10] = {};
+            sprintf(text, "L %i", state->layer_index);
+            lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc_small, text);
+        } else {
+            lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc_small, state->layer_label);
+        }
+
+        // Draw RSSI (phía dưới)
+        char rssi_text[20] = {};
+        if (state->peripheral_rssi[0] != 0) {
+            snprintf(rssi_text, sizeof(rssi_text), "%ddBm", state->peripheral_rssi[0]);
+            lv_canvas_draw_text(canvas, 0, 48, 68, &label_dsc_small, rssi_text);
+        } else {
+            lv_canvas_draw_text(canvas, 0, 48, 68, &label_dsc_small, "---");
+        }
+    } else {
+        // Peripheral: Chỉ hiển thị Layer
+        if (state->layer_label == NULL || strlen(state->layer_label) == 0) {
+            char text[10] = {};
+            sprintf(text, "LAYER %i", state->layer_index);
+            lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc, text);
+        } else {
+            lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc, state->layer_label);
+        }
+    }
+    #else
+    // Non-split: Chỉ hiển thị Layer
     if (state->layer_label == NULL || strlen(state->layer_label) == 0) {
         char text[10] = {};
-
         sprintf(text, "LAYER %i", state->layer_index);
-
         lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc, text);
     } else {
         lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc, state->layer_label);
     }
+    #endif
 
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
@@ -332,7 +352,7 @@ static void set_rssi_status(struct zmk_widget_status *widget, struct rssi_status
         widget->state.peripheral_rssi[i] = state.rssi[i];
     }
 
-    draw_top(widget->obj, widget->cbuf, &widget->state);
+    draw_bottom(widget->obj, widget->cbuf3, &widget->state);  // ← Update bottom canvas
 }
 
 static void rssi_status_update_cb(struct rssi_status_state state) {
