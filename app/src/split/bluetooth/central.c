@@ -268,6 +268,8 @@ int reserve_peripheral_slot(const bt_addr_le_t *addr) {
         if (peripherals[i].state == PERIPHERAL_SLOT_STATE_OPEN) {
             release_peripheral_slot(i);
             peripherals[i].state = PERIPHERAL_SLOT_STATE_CONNECTING;
+            // ← THÊM: Lưu địa chỉ khi bắt đầu kết nối
+            bt_addr_le_copy(&peripherals[i].peripheral_addr, addr);
             return i;
         }
     }
@@ -922,13 +924,19 @@ static void split_central_device_found(const bt_addr_le_t *addr, int8_t rssi, ui
         if (peripherals[i].state == PERIPHERAL_SLOT_STATE_CONNECTING ||
             peripherals[i].state == PERIPHERAL_SLOT_STATE_CONNECTED) {
             
+            bool match = false;
             if (peripherals[i].conn != NULL) {
                 const bt_addr_le_t *conn_addr = bt_conn_get_dst(peripherals[i].conn);
-                if (bt_addr_le_cmp(addr, conn_addr) == 0) {
-                    peripherals[i].last_rssi = rssi;
-                    LOG_DBG("Updated RSSI for peripheral slot %d: %d dBm", i, rssi);
-                    break;
-                }
+                match = (bt_addr_le_cmp(addr, conn_addr) == 0);
+            } else {
+                // Nếu chưa có conn (đang connecting), so sánh với addr đã lưu
+                match = (bt_addr_le_cmp(addr, &peripherals[i].peripheral_addr) == 0);
+            }
+
+            if (match) {
+                peripherals[i].last_rssi = rssi;
+                LOG_DBG("Updated RSSI for peripheral slot %d: %d dBm", i, rssi);
+                break;
             }
         }
     }
@@ -1018,6 +1026,16 @@ static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {
     }
 
     LOG_DBG("Connected: %s", addr);
+
+    int idx = peripheral_slot_index_for_conn(conn);
+    if (idx < 0) {
+        LOG_ERR("No slot found for connected peripheral");
+        return;
+    }
+
+    // ← THÊM: Lưu địa chỉ vào slot (dự phòng, đã lưu ở reserve)
+    bt_addr_le_copy(&peripherals[idx].peripheral_addr, dst);
+    
 
     confirm_peripheral_slot_conn(conn);
     split_central_process_connection(conn);
