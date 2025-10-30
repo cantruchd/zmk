@@ -1006,7 +1006,8 @@ K_WORK_DELAYABLE_DEFINE(restart_scan_work, restart_scan_work_handler);
 static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {
     char addr[BT_ADDR_LE_STR_LEN];
     struct bt_conn_info info;
-
+    const bt_addr_le_t *dst = bt_conn_get_dst(conn);
+    
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
     bt_conn_get_info(conn, &info);
