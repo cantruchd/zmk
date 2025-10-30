@@ -152,37 +152,36 @@ void peripheral_event_work_callback(struct k_work *work);
 
 K_WORK_DEFINE(peripheral_event_work, peripheral_event_work_callback);
 
-// ← THÊM: RSSI Reading
+// ← THAY ĐỔI HOÀN TOÀN: Dùng bt_hci_read_rssi thay vì scan
 static void read_rssi_work_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(read_rssi_work, read_rssi_work_handler);
-
-#define RSSI_READ_INTERVAL_MS 5000
+#define RSSI_READ_INTERVAL_MS 3000  // Có thể điều chỉnh
 
 static void read_rssi_work_handler(struct k_work *work) {
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
-        if (peripherals[i].state != PERIPHERAL_SLOT_STATE_CONNECTED || 
-            peripherals[i].conn == NULL) {
-            // ← SỬA: Bỏ print pointer, chỉ log state
-            LOG_DBG("Peripheral %d: state=%d - skipping", i, peripherals[i].state);
+        struct peripheral_slot *slot = &peripherals[i];
+        if (slot->state != PERIPHERAL_SLOT_STATE_CONNECTED || slot->conn == NULL) {
             continue;
         }
 
-        int8_t rssi = peripherals[i].last_rssi;
-        
-        // Nếu chưa có RSSI từ scan, sử dụng giá trị mặc định
-        if (rssi == 0) {
-            // Giá trị mặc định dựa trên connection status
-            rssi = -65;  // Signal trung bình
-            peripherals[i].last_rssi = rssi;
-            LOG_INF("Peripheral %d RSSI: %d dBm (default, waiting for scan update)", i, rssi);
+        int8_t rssi = 0;
+        const bt_addr_le_t *addr = bt_conn_get_dst(slot->conn);
+        int err = bt_hci_read_rssi(addr, &rssi);
+
+        if (err == 0) {
+            slot->last_rssi = rssi;
+            char addr_str[BT_ADDR_LE_STR_LEN];
+            bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+            LOG_INF("Peripheral %d [%s] RSSI: %d dBm", i, addr_str, rssi);
         } else {
-            LOG_INF("Peripheral %d RSSI: %d dBm (from last scan)", i, rssi);
+            LOG_WRN("HCI read RSSI failed for slot %d (err %d)", i, err);
+            // Giữ giá trị cũ nếu lỗi
         }
-        
+
         raise_zmk_split_peripheral_rssi_changed(
             (struct zmk_split_peripheral_rssi_changed){
                 .source = i,
-                .rssi = rssi
+                .rssi = slot->last_rssi
             }
         );
     }
@@ -289,15 +288,16 @@ int release_peripheral_slot_for_conn(struct bt_conn *conn) {
 
 int confirm_peripheral_slot_conn(struct bt_conn *conn) {
     int idx = peripheral_slot_index_for_conn(conn);
-    if (idx < 0) {
-        return idx;
-    }
+    if (idx < 0) return idx;
 
     peripherals[idx].state = PERIPHERAL_SLOT_STATE_CONNECTED;
-    
-    // ← THÊM: Bắt đầu đọc RSSI
+
+    // ← THÊM: Lưu lại địa chỉ (dự phòng)
+    bt_addr_le_copy(&peripherals[idx].peripheral_addr, bt_conn_get_dst(conn));
+
+    // ← THÊM: Bắt đầu đọc RSSI định kỳ
     k_work_schedule(&read_rssi_work, K_MSEC(1000));
-    
+
     return 0;
 }
 
