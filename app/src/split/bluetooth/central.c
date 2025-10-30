@@ -36,6 +36,60 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/hid_indicators_types.h>
 #include <zmk/physical_layouts.h>
 
+
+
+
+// Định nghĩa hàm hỗ trợ để đọc RSSI từ handle kết nối
+static int read_conn_rssi(struct bt_conn *conn, int8_t *rssi_out) {
+    struct net_buf *buf, *rsp = NULL;
+    struct bt_hci_cp_read_rssi *cp;
+    struct bt_hci_rp_read_rssi *rp;
+    int err;
+    uint16_t handle;
+
+    // Lấy handle kết nối từ đối tượng connection
+    err = bt_conn_get_handle(conn, &handle);
+    if (err) {
+        LOG_WRN("Could not get connection handle (err %d)", err);
+        return err;
+    }
+    
+    // Tạo buffer cho lệnh HCI
+    buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
+    if (!buf) {
+        LOG_ERR("Unable to allocate command buffer");
+        return -ENOMEM;
+    }
+
+    // Điền handle vào command packet (chú ý chuyển đổi endian nếu cần)
+    cp = net_buf_add(buf, sizeof(*cp));
+    cp->handle = sys_cpu_to_le16(handle);
+
+    // Gửi lệnh HCI đồng bộ và chờ phản hồi
+    err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
+    if (err) {
+        uint8_t reason = rsp ? ((struct bt_hci_rp_read_rssi *)rsp->data)->status : 0;
+        LOG_WRN("Read RSSI HCI command failed: %d, reason 0x%02x", err, reason);
+        // Clean up response buffer if it was allocated despite the error
+        if (rsp) {
+            net_buf_unref(rsp);
+        }
+        return err;
+    }
+
+    // Xử lý phản hồi thành công
+    rp = (void *)rsp->data;
+    *rssi_out = rp->rssi;
+
+    // Giải phóng buffer phản hồi
+    net_buf_unref(rsp);
+
+    return 0; // Success
+}
+
+
+
+
 static int start_scanning(void);
 
 #define POSITION_STATE_DATA_LEN 16
@@ -157,6 +211,7 @@ static void read_rssi_work_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(read_rssi_work, read_rssi_work_handler);
 #define RSSI_READ_INTERVAL_MS 3000  // Có thể điều chỉnh
 
+// <-- THAY ĐỔI HOÀN TOÀN: Dùng bt_hci_cmd_send_sync thay vì hàm custom bt_hci_read_rssi -->
 static void read_rssi_work_handler(struct k_work *work) {
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         struct peripheral_slot *slot = &peripherals[i];
@@ -165,25 +220,25 @@ static void read_rssi_work_handler(struct k_work *work) {
         }
 
         int8_t rssi = 0;
-        const bt_addr_le_t *addr = bt_conn_get_dst(slot->conn);
-        int err = bt_hci_read_rssi(addr, &rssi);
+        // Sử dụng hàm hỗ trợ mới (sử dụng connection handle)
+        int err = read_conn_rssi(slot->conn, &rssi);
 
         if (err == 0) {
             slot->last_rssi = rssi;
             char addr_str[BT_ADDR_LE_STR_LEN];
-            bt_addr_le_to_str(addr, addr_str, sizeof(addr_str));
+            bt_addr_le_to_str(bt_conn_get_dst(slot->conn), addr_str, sizeof(addr_str));
             LOG_INF("Peripheral %d [%s] RSSI: %d dBm", i, addr_str, rssi);
+
+            raise_zmk_split_peripheral_rssi_changed(
+                (struct zmk_split_peripheral_rssi_changed){
+                    .source = i,
+                    .rssi = slot->last_rssi
+                }
+            );
         } else {
             LOG_WRN("HCI read RSSI failed for slot %d (err %d)", i, err);
             // Giữ giá trị cũ nếu lỗi
         }
-
-        raise_zmk_split_peripheral_rssi_changed(
-            (struct zmk_split_peripheral_rssi_changed){
-                .source = i,
-                .rssi = slot->last_rssi
-            }
-        );
     }
 
     k_work_schedule(&read_rssi_work, K_MSEC(RSSI_READ_INTERVAL_MS));
