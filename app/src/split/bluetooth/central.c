@@ -16,6 +16,7 @@
 #include <zephyr/sys/byteorder.h>
 
 #include <zephyr/logging/log.h>
+#include <zephyr/bluetooth/hci.h>  // ← THÊM: Để dùng bt_hci_read_rssi
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
