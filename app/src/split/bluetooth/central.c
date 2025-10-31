@@ -398,7 +398,7 @@ int confirm_peripheral_slot_conn(struct bt_conn *conn) {
     peripherals[idx].state = PERIPHERAL_SLOT_STATE_CONNECTED;
     
     // ← THÊM: Bắt đầu đọc RSSI
-    k_work_schedule(&read_rssi_work, K_MSEC(1000));
+    k_work_schedule(&read_rssi_work, K_MSEC(500));
     
     return 0;
 }
@@ -1129,7 +1129,7 @@ static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {
     k_work_submit(&notify_status_work);
     
     // ← THÊM: Restart scan sau 2s để lấy RSSI từ advertising
-    k_work_schedule(&restart_scan_work, K_MSEC(2000));
+    //k_work_schedule(&restart_scan_work, K_MSEC(2000));
 }
 
 static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {
