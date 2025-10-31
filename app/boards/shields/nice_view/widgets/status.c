@@ -183,10 +183,10 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
         // Draw RSSI (phía dưới)
         char rssi_text[20] = {};
         if (state->peripheral_rssi[0] != 0) {
-            snprintf(rssi_text, sizeof(rssi_text), "%ddBm", state->peripheral_rssi[0]);
-            lv_canvas_draw_text(canvas, 0, 48, 68, &label_dsc_small, rssi_text);
+            snprintf(rssi_text, sizeof(rssi_text), "%d", state->peripheral_rssi[0]);
+            lv_canvas_draw_text(canvas, 0, 48, 68, &lv_font_montserrat_26, rssi_text);
         } else {
-            lv_canvas_draw_text(canvas, 0, 48, 68, &label_dsc_small, "---");
+            lv_canvas_draw_text(canvas, 0, 48, 68, &lv_font_montserrat_26, "---");
         }
     } else {
         // Peripheral: Chỉ hiển thị Layer
