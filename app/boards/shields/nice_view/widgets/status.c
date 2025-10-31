@@ -187,9 +187,9 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
         char rssi_text[20] = {};
         if (state->peripheral_rssi[0] != 0) {
             snprintf(rssi_text, sizeof(rssi_text), "%d", state->peripheral_rssi[0]);
-            lv_canvas_draw_text(canvas, 0, 28, 68, &big_label_dsc, rssi_text);
+            lv_canvas_draw_text(canvas, 0, 13, 68, &big_label_dsc, rssi_text);
         } else {
-            lv_canvas_draw_text(canvas, 0, 28, 68, &big_label_dsc, "---");
+            lv_canvas_draw_text(canvas, 0, 13, 68, &big_label_dsc, "---");
         }
     } else {
         // Peripheral: Chỉ hiển thị Layer
