@@ -158,42 +158,6 @@ K_WORK_DELAYABLE_DEFINE(read_rssi_work, read_rssi_work_handler);
 
 #define RSSI_READ_INTERVAL_MS 5000
 
-// ← THÊM: Include cho HCI commands
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/net/buf.h>
-
-// ← THÊM: Callback xử lý RSSI response
-static void read_rssi_cb(struct net_buf *buf, void *user_data) {
-    uint8_t slot_idx = (uint8_t)(uintptr_t)user_data;
-    
-    if (!buf) {
-        LOG_WRN("No response for RSSI read on slot %d", slot_idx);
-        return;
-    }
-
-    struct bt_hci_rp_read_rssi *rp = (void *)buf->data;
-    
-    if (rp->status) {
-        LOG_WRN("RSSI read failed for slot %d: status 0x%02x", slot_idx, rp->status);
-        return;
-    }
-
-    int8_t rssi = rp->rssi;
-    
-    if (slot_idx < ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
-        LOG_INF("Peripheral %d RSSI: %d dBm (from connection)", slot_idx, rssi);
-        
-        peripherals[slot_idx].last_rssi = rssi;
-        
-        raise_zmk_split_peripheral_rssi_changed(
-            (struct zmk_split_peripheral_rssi_changed){
-                .source = slot_idx,
-                .rssi = rssi
-            }
-        );
-    }
-}
-
 static void read_rssi_work_handler(struct k_work *work) {
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         if (peripherals[i].state != PERIPHERAL_SLOT_STATE_CONNECTED || 
@@ -201,9 +165,10 @@ static void read_rssi_work_handler(struct k_work *work) {
             continue;
         }
 
-        // ← MỚI: Gửi HCI command đọc RSSI từ connection
+        // ← SỬA: Dùng synchronous HCI command
         struct bt_hci_cp_read_rssi *cp;
-        struct net_buf *buf;
+        struct bt_hci_rp_read_rssi *rp;
+        struct net_buf *buf, *rsp = NULL;
         
         buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
         if (!buf) {
@@ -214,11 +179,39 @@ static void read_rssi_work_handler(struct k_work *work) {
         cp = net_buf_add(buf, sizeof(*cp));
         cp->handle = sys_cpu_to_le16(bt_conn_index(peripherals[i].conn));
         
-        int err = bt_hci_cmd_send_cb(BT_HCI_OP_READ_RSSI, buf, read_rssi_cb, 
-                                     (void *)(uintptr_t)i);
+        int err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
         if (err) {
             LOG_ERR("Failed to send RSSI command for slot %d: %d", i, err);
+            continue;
         }
+        
+        if (!rsp) {
+            LOG_WRN("No response for RSSI read on slot %d", i);
+            continue;
+        }
+        
+        rp = (void *)rsp->data;
+        
+        if (rp->status) {
+            LOG_WRN("RSSI read failed for slot %d: status 0x%02x", i, rp->status);
+            net_buf_unref(rsp);
+            continue;
+        }
+
+        int8_t rssi = rp->rssi;
+        
+        LOG_INF("Peripheral %d RSSI: %d dBm (from connection)", i, rssi);
+        
+        peripherals[i].last_rssi = rssi;
+        
+        raise_zmk_split_peripheral_rssi_changed(
+            (struct zmk_split_peripheral_rssi_changed){
+                .source = i,
+                .rssi = rssi
+            }
+        );
+        
+        net_buf_unref(rsp);
     }
 
     k_work_schedule(&read_rssi_work, K_MSEC(RSSI_READ_INTERVAL_MS));
