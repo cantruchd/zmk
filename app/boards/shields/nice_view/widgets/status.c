@@ -163,6 +163,9 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
     lv_draw_label_dsc_t label_dsc_small;  // ← THÊM: Font nhỏ cho RSSI
     init_label_dsc(&label_dsc_small, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_CENTER);
 
+    lv_draw_label_dsc_t label_dsc_small_right;  // ← THÊM: Font nhỏ cho RSSI
+    init_label_dsc(&label_dsc_small_right, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_RIGHT);
+
     lv_draw_label_dsc_t big_label_dsc;
     init_label_dsc(&big_label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_26, LV_TEXT_ALIGN_LEFT);
 
@@ -185,9 +188,11 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
 
         // Draw RSSI (phía dưới)
         char rssi_text[20] = {};
+        char dbm = "dBm";
         if (state->peripheral_rssi[0] != 0) {
             snprintf(rssi_text, sizeof(rssi_text), "%d", state->peripheral_rssi[0]);
             lv_canvas_draw_text(canvas, 0, 40, 68, &big_label_dsc, rssi_text);
+            lv_canvas_draw_text(canvas, 0, 40, 68, &label_dsc_small_right, dbm);            
         } else {
             lv_canvas_draw_text(canvas, 0, 40, 68, &big_label_dsc, "---");
         }
