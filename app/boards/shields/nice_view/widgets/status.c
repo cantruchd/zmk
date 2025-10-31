@@ -164,7 +164,7 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
     init_label_dsc(&label_dsc_small, LVGL_FOREGROUND, &lv_font_unscii_8, LV_TEXT_ALIGN_CENTER);
 
     lv_draw_label_dsc_t big_label_dsc;
-    init_label_dsc(&big_label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_26, LV_TEXT_ALIGN_CENTER);
+    init_label_dsc(&big_label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_26, LV_TEXT_ALIGN_LEFT);
 
     // Fill background
     lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &rect_black_dsc);
@@ -187,9 +187,9 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
         char rssi_text[20] = {};
         if (state->peripheral_rssi[0] != 0) {
             snprintf(rssi_text, sizeof(rssi_text), "%d", state->peripheral_rssi[0]);
-            lv_canvas_draw_text(canvas, 0, 13, 68, &big_label_dsc, rssi_text);
+            lv_canvas_draw_text(canvas, 0, 43, 68, &big_label_dsc, rssi_text);
         } else {
-            lv_canvas_draw_text(canvas, 0, 13, 68, &big_label_dsc, "---");
+            lv_canvas_draw_text(canvas, 0, 43, 68, &big_label_dsc, "---");
         }
     } else {
         // Peripheral: Chỉ hiển thị Layer
