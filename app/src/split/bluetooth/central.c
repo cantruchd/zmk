@@ -14,6 +14,7 @@
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/net/buf.h>  // ← THÊM cho HCI commands
 
 #include <zephyr/logging/log.h>
 
@@ -157,33 +158,67 @@ K_WORK_DELAYABLE_DEFINE(read_rssi_work, read_rssi_work_handler);
 
 #define RSSI_READ_INTERVAL_MS 5000
 
+// ← THÊM: Include cho HCI commands
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/net/buf.h>
+
+// ← THÊM: Callback xử lý RSSI response
+static void read_rssi_cb(struct net_buf *buf, void *user_data) {
+    uint8_t slot_idx = (uint8_t)(uintptr_t)user_data;
+    
+    if (!buf) {
+        LOG_WRN("No response for RSSI read on slot %d", slot_idx);
+        return;
+    }
+
+    struct bt_hci_rp_read_rssi *rp = (void *)buf->data;
+    
+    if (rp->status) {
+        LOG_WRN("RSSI read failed for slot %d: status 0x%02x", slot_idx, rp->status);
+        return;
+    }
+
+    int8_t rssi = rp->rssi;
+    
+    if (slot_idx < ZMK_SPLIT_BLE_PERIPHERAL_COUNT) {
+        LOG_INF("Peripheral %d RSSI: %d dBm (from connection)", slot_idx, rssi);
+        
+        peripherals[slot_idx].last_rssi = rssi;
+        
+        raise_zmk_split_peripheral_rssi_changed(
+            (struct zmk_split_peripheral_rssi_changed){
+                .source = slot_idx,
+                .rssi = rssi
+            }
+        );
+    }
+}
+
 static void read_rssi_work_handler(struct k_work *work) {
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         if (peripherals[i].state != PERIPHERAL_SLOT_STATE_CONNECTED || 
             peripherals[i].conn == NULL) {
-            // ← SỬA: Bỏ print pointer, chỉ log state
-            LOG_DBG("Peripheral %d: state=%d - skipping", i, peripherals[i].state);
             continue;
         }
 
-        int8_t rssi = peripherals[i].last_rssi;
+        // ← MỚI: Gửi HCI command đọc RSSI từ connection
+        struct bt_hci_cp_read_rssi *cp;
+        struct net_buf *buf;
         
-        // Nếu chưa có RSSI từ scan, sử dụng giá trị mặc định
-        if (rssi == 0) {
-            // Giá trị mặc định dựa trên connection status
-            rssi = -65;  // Signal trung bình
-            peripherals[i].last_rssi = rssi;
-            LOG_INF("Peripheral %d RSSI: %d dBm (default, waiting for scan update)", i, rssi);
-        } else {
-            LOG_INF("Peripheral %d RSSI: %d dBm (from last scan)", i, rssi);
+        buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
+        if (!buf) {
+            LOG_ERR("Failed to create RSSI command buffer for slot %d", i);
+            continue;
         }
         
-        raise_zmk_split_peripheral_rssi_changed(
-            (struct zmk_split_peripheral_rssi_changed){
-                .source = i,
-                .rssi = rssi
-            }
-        );
+        cp = net_buf_add(buf, sizeof(*cp));
+        cp->handle = sys_cpu_to_le16(bt_conn_index(peripherals[i].conn));
+        
+        int err = bt_hci_cmd_send_cb(BT_HCI_OP_READ_RSSI, buf, read_rssi_cb, 
+                                     (void *)(uintptr_t)i);
+        if (err) {
+            LOG_ERR("Failed to send RSSI command for slot %d: %d", i, err);
+        }
     }
 
     k_work_schedule(&read_rssi_work, K_MSEC(RSSI_READ_INTERVAL_MS));
@@ -268,8 +303,6 @@ int reserve_peripheral_slot(const bt_addr_le_t *addr) {
         if (peripherals[i].state == PERIPHERAL_SLOT_STATE_OPEN) {
             release_peripheral_slot(i);
             peripherals[i].state = PERIPHERAL_SLOT_STATE_CONNECTING;
-            // ← THÊM: Lưu địa chỉ khi bắt đầu kết nối
-            bt_addr_le_copy(&peripherals[i].peripheral_addr, addr);
             return i;
         }
     }
@@ -924,19 +957,13 @@ static void split_central_device_found(const bt_addr_le_t *addr, int8_t rssi, ui
         if (peripherals[i].state == PERIPHERAL_SLOT_STATE_CONNECTING ||
             peripherals[i].state == PERIPHERAL_SLOT_STATE_CONNECTED) {
             
-            bool match = false;
             if (peripherals[i].conn != NULL) {
                 const bt_addr_le_t *conn_addr = bt_conn_get_dst(peripherals[i].conn);
-                match = (bt_addr_le_cmp(addr, conn_addr) == 0);
-            } else {
-                // Nếu chưa có conn (đang connecting), so sánh với addr đã lưu
-                match = (bt_addr_le_cmp(addr, &peripherals[i].peripheral_addr) == 0);
-            }
-
-            if (match) {
-                peripherals[i].last_rssi = rssi;
-                LOG_DBG("Updated RSSI for peripheral slot %d: %d dBm", i, rssi);
-                break;
+                if (bt_addr_le_cmp(addr, conn_addr) == 0) {
+                    peripherals[i].last_rssi = rssi;
+                    LOG_DBG("Updated RSSI for peripheral slot %d: %d dBm", i, rssi);
+                    break;
+                }
             }
         }
     }
@@ -1006,8 +1033,7 @@ K_WORK_DELAYABLE_DEFINE(restart_scan_work, restart_scan_work_handler);
 static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {
     char addr[BT_ADDR_LE_STR_LEN];
     struct bt_conn_info info;
-    const bt_addr_le_t *dst = bt_conn_get_dst(conn);
-    
+
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
     bt_conn_get_info(conn, &info);
@@ -1027,16 +1053,6 @@ static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {
     }
 
     LOG_DBG("Connected: %s", addr);
-
-    int idx = peripheral_slot_index_for_conn(conn);
-    if (idx < 0) {
-        LOG_ERR("No slot found for connected peripheral");
-        return;
-    }
-
-    // ← THÊM: Lưu địa chỉ vào slot (dự phòng, đã lưu ở reserve)
-    bt_addr_le_copy(&peripherals[idx].peripheral_addr, dst);
-    
 
     confirm_peripheral_slot_conn(conn);
     split_central_process_connection(conn);
