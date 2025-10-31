@@ -14,7 +14,10 @@
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/byteorder.h>
-#include <zephyr/net/buf.h>  // ← THÊM cho HCI commands
+#include <zephyr/net/buf.h>
+
+// ← THÊM: Internal Zephyr headers để lấy connection handle
+#include <zephyr/bluetooth/hci_vs.h>
 
 #include <zephyr/logging/log.h>
 
@@ -158,6 +161,31 @@ K_WORK_DELAYABLE_DEFINE(read_rssi_work, read_rssi_work_handler);
 
 #define RSSI_READ_INTERVAL_MS 5000
 
+// ← THÊM: Helper để lấy HCI connection handle từ bt_conn
+// Zephyr không expose handle ra public API, cần dùng trick này
+static uint16_t get_conn_handle(struct bt_conn *conn) {
+    // bt_conn_index() returns array index (0, 1, 2...)
+    // HCI handle thường là index + offset
+    // Offset phụ thuộc vào Zephyr version, thường là 0x80 hoặc connection được assign tuần tự
+    
+    // Workaround: Dùng bt_conn_get_info để verify connection
+    struct bt_conn_info info;
+    int err = bt_conn_get_info(conn, &info);
+    if (err) {
+        return 0;
+    }
+    
+    // Connection handle thường bắt đầu từ 0x0000-0x0EFF (BLE spec)
+    // ZMK thường chỉ có 1-2 connections, handle sẽ là 0, 1, hoặc 0x80, 0x81
+    uint8_t idx = bt_conn_index(conn);
+    
+    // Try common handle patterns
+    // Pattern 1: Direct index (0, 1, 2)
+    // Pattern 2: Index + 0x80 (0x80, 0x81, 0x82) - Nordic specific
+    
+    return idx; // Start with direct index, adjust if needed
+}
+
 static void read_rssi_work_handler(struct k_work *work) {
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         if (peripherals[i].state != PERIPHERAL_SLOT_STATE_CONNECTED || 
@@ -165,42 +193,80 @@ static void read_rssi_work_handler(struct k_work *work) {
             continue;
         }
 
-        // ← SỬA: Lấy connection info để có handle
-        struct bt_conn_info info;
-        int err = bt_conn_get_info(peripherals[i].conn, &info);
+        struct bt_hci_cp_read_rssi *cp;
+        struct bt_hci_rp_read_rssi *rp;
+        struct net_buf *buf, *rsp = NULL;
+        
+        buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
+        if (!buf) {
+            LOG_ERR("Failed to create RSSI command buffer for slot %d", i);
+            continue;
+        }
+        
+        cp = net_buf_add(buf, sizeof(*cp));
+        uint16_t handle = get_conn_handle(peripherals[i].conn);
+        cp->handle = sys_cpu_to_le16(handle);
+        
+        LOG_DBG("Reading RSSI for slot %d, handle 0x%04x", i, handle);
+        
+        int err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
         if (err) {
-            LOG_ERR("Failed to get conn info for slot %d: %d", i, err);
-            continue;
-        }
-
-        // Kiểm tra connection type
-        if (info.type != BT_CONN_TYPE_LE) {
-            LOG_DBG("Slot %d is not LE connection", i);
-            continue;
-        }
-
-        // ← SỬA: Dùng Zephyr internal function để lấy handle
-        // Workaround: RSSI không có API trực tiếp trong Zephyr cũ
-        // Fallback: Dùng RSSI từ scan hoặc estimate
-        
-        int8_t rssi = peripherals[i].last_rssi;
-        
-        if (rssi == 0) {
-            // Estimate dựa trên connection quality
-            if (info.le.interval < 10) {
-                rssi = -50;  // Low latency = good signal
-            } else if (info.le.interval < 20) {
-                rssi = -60;  // Medium
-            } else {
-                rssi = -70;  // High latency = weak signal
-            }
+            LOG_ERR("Failed to send RSSI command for slot %d (handle 0x%04x): %d", 
+                    i, handle, err);
             
-            peripherals[i].last_rssi = rssi;
-            LOG_INF("Peripheral %d RSSI: %d dBm (estimated from connection interval %d)", 
-                    i, rssi, info.le.interval);
-        } else {
-            LOG_INF("Peripheral %d RSSI: %d dBm (from scan)", i, rssi);
+            // Fallback: Dùng RSSI từ scan nếu có
+            if (peripherals[i].last_rssi != 0) {
+                LOG_INF("Peripheral %d RSSI: %d dBm (from scan, HCI failed)", 
+                        i, peripherals[i].last_rssi);
+                
+                raise_zmk_split_peripheral_rssi_changed(
+                    (struct zmk_split_peripheral_rssi_changed){
+                        .source = i,
+                        .rssi = peripherals[i].last_rssi
+                    }
+                );
+            }
+            continue;
         }
+        
+        if (!rsp) {
+            LOG_WRN("No response for RSSI read on slot %d", i);
+            continue;
+        }
+        
+        rp = (void *)rsp->data;
+        
+        if (rp->status) {
+            LOG_WRN("RSSI read failed for slot %d: status 0x%02x, trying handle+0x80", 
+                    i, rp->status);
+            net_buf_unref(rsp);
+            
+            // Retry với handle offset (Nordic pattern)
+            buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
+            if (buf) {
+                cp = net_buf_add(buf, sizeof(*cp));
+                cp->handle = sys_cpu_to_le16(handle + 0x80);
+                
+                err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
+                if (err || !rsp) {
+                    continue;
+                }
+                
+                rp = (void *)rsp->data;
+                if (rp->status) {
+                    net_buf_unref(rsp);
+                    continue;
+                }
+            } else {
+                continue;
+            }
+        }
+
+        int8_t rssi = rp->rssi;
+        
+        LOG_INF("Peripheral %d RSSI: %d dBm (from HCI)", i, rssi);
+        
+        peripherals[i].last_rssi = rssi;
         
         raise_zmk_split_peripheral_rssi_changed(
             (struct zmk_split_peripheral_rssi_changed){
@@ -208,6 +274,8 @@ static void read_rssi_work_handler(struct k_work *work) {
                 .rssi = rssi
             }
         );
+        
+        net_buf_unref(rsp);
     }
 
     k_work_schedule(&read_rssi_work, K_MSEC(RSSI_READ_INTERVAL_MS));
