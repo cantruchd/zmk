@@ -209,7 +209,7 @@ K_WORK_DEFINE(peripheral_event_work, peripheral_event_work_callback);
 // ← THAY ĐỔI HOÀN TOÀN: Dùng bt_hci_read_rssi thay vì scan
 static void read_rssi_work_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(read_rssi_work, read_rssi_work_handler);
-#define RSSI_READ_INTERVAL_MS 3000  // Có thể điều chỉnh
+#define RSSI_READ_INTERVAL_MS 500  // Có thể điều chỉnh
 
 // <-- THAY ĐỔI HOÀN TOÀN: Dùng bt_hci_cmd_send_sync thay vì hàm custom bt_hci_read_rssi -->
 static void read_rssi_work_handler(struct k_work *work) {
