@@ -193,9 +193,10 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
             snprintf(rssi_text, sizeof(rssi_text), "%d", state->peripheral_rssi[0]);
             //sprintf(dbm, "dBm);
             lv_canvas_draw_text(canvas, 0, 40, 68, &big_label_dsc, rssi_text);
-            lv_canvas_draw_text(canvas, 0, 40, 68, &label_dsc_small_right, "dBm");
+            lv_canvas_draw_text(canvas, 0, 52, 68, &label_dsc_small_right, "dBm");
         } else {
             lv_canvas_draw_text(canvas, 0, 40, 68, &big_label_dsc, "---");
+            lv_canvas_draw_text(canvas, 0, 52, 68, &label_dsc_small_right, "dBm");
         }
     } else {
         // Peripheral: Chỉ hiển thị Layer
