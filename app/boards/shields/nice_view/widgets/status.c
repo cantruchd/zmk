@@ -188,9 +188,10 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
 
         // Draw RSSI (phía dưới)
         char rssi_text[20] = {};
-        char dbm = "dBm";
+        char dbm[4] = = {};
         if (state->peripheral_rssi[0] != 0) {
             snprintf(rssi_text, sizeof(rssi_text), "%d", state->peripheral_rssi[0]);
+            snprintf(dbm, sizeof(rssi_text), "dBm", 0);
             lv_canvas_draw_text(canvas, 0, 40, 68, &big_label_dsc, rssi_text);
             lv_canvas_draw_text(canvas, 0, 40, 68, &label_dsc_small_right, dbm);            
         } else {
