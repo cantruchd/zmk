@@ -196,77 +196,92 @@ static void read_rssi_work_handler(struct k_work *work) {
         struct bt_hci_cp_read_rssi *cp;
         struct bt_hci_rp_read_rssi *rp;
         struct net_buf *buf, *rsp = NULL;
-        
-        buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
-        if (!buf) {
-            LOG_ERR("Failed to create RSSI command buffer for slot %d", i);
-            continue;
-        }
-        
-        cp = net_buf_add(buf, sizeof(*cp));
         uint16_t handle = get_conn_handle(peripherals[i].conn);
-        cp->handle = sys_cpu_to_le16(handle);
+        bool success = false;
+        int8_t rssi = 0;
         
-        LOG_DBG("Reading RSSI for slot %d, handle 0x%04x", i, handle);
-        
-        int err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
-        if (err) {
-            LOG_ERR("Failed to send RSSI command for slot %d (handle 0x%04x): %d", 
-                    i, handle, err);
+        // Try pattern 1: Direct handle (0x0000, 0x0001, etc)
+        buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
+        if (buf) {
+            cp = net_buf_add(buf, sizeof(*cp));
+            cp->handle = sys_cpu_to_le16(handle);
             
-            // Fallback: Dùng RSSI từ scan nếu có
-            if (peripherals[i].last_rssi != 0) {
-                LOG_INF("Peripheral %d RSSI: %d dBm (from scan, HCI failed)", 
-                        i, peripherals[i].last_rssi);
-                
-                raise_zmk_split_peripheral_rssi_changed(
-                    (struct zmk_split_peripheral_rssi_changed){
-                        .source = i,
-                        .rssi = peripherals[i].last_rssi
-                    }
-                );
+            LOG_DBG("Reading RSSI for slot %d, handle 0x%04x", i, handle);
+            
+            int err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
+            if (err == 0 && rsp) {
+                rp = (void *)rsp->data;
+                if (rp->status == 0) {
+                    rssi = rp->rssi;
+                    success = true;
+                    LOG_INF("Peripheral %d RSSI: %d dBm (handle 0x%04x)", i, rssi, handle);
+                }
+                net_buf_unref(rsp);
+                rsp = NULL;
             }
-            continue;
         }
         
-        if (!rsp) {
-            LOG_WRN("No response for RSSI read on slot %d", i);
-            continue;
-        }
-        
-        rp = (void *)rsp->data;
-        
-        if (rp->status) {
-            LOG_WRN("RSSI read failed for slot %d: status 0x%02x, trying handle+0x80", 
-                    i, rp->status);
-            net_buf_unref(rsp);
+        // Try pattern 2: Nordic offset handle (0x0080, 0x0081, etc)
+        if (!success) {
+            uint16_t handle_offset = handle + 0x80;
             
-            // Retry với handle offset (Nordic pattern)
             buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
             if (buf) {
                 cp = net_buf_add(buf, sizeof(*cp));
-                cp->handle = sys_cpu_to_le16(handle + 0x80);
+                cp->handle = sys_cpu_to_le16(handle_offset);
                 
-                err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
-                if (err || !rsp) {
-                    continue;
-                }
+                LOG_DBG("Retrying RSSI for slot %d, handle 0x%04x", i, handle_offset);
                 
-                rp = (void *)rsp->data;
-                if (rp->status) {
+                int err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
+                if (err == 0 && rsp) {
+                    rp = (void *)rsp->data;
+                    if (rp->status == 0) {
+                        rssi = rp->rssi;
+                        success = true;
+                        LOG_INF("Peripheral %d RSSI: %d dBm (handle 0x%04x)", i, rssi, handle_offset);
+                    }
                     net_buf_unref(rsp);
-                    continue;
+                    rsp = NULL;
                 }
-            } else {
-                continue;
             }
         }
-
-        int8_t rssi = rp->rssi;
         
-        LOG_INF("Peripheral %d RSSI: %d dBm (from HCI)", i, rssi);
+        // Try pattern 3: Try sequential handles 0x0000-0x0003
+        if (!success) {
+            for (uint16_t test_handle = 0x0000; test_handle <= 0x0003 && !success; test_handle++) {
+                buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
+                if (!buf) continue;
+                
+                cp = net_buf_add(buf, sizeof(*cp));
+                cp->handle = sys_cpu_to_le16(test_handle);
+                
+                int err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
+                if (err == 0 && rsp) {
+                    rp = (void *)rsp->data;
+                    if (rp->status == 0) {
+                        rssi = rp->rssi;
+                        success = true;
+                        LOG_INF("Peripheral %d RSSI: %d dBm (found with handle 0x%04x)", 
+                                i, rssi, test_handle);
+                    }
+                    net_buf_unref(rsp);
+                    rsp = NULL;
+                }
+            }
+        }
         
-        peripherals[i].last_rssi = rssi;
+        // Fallback: Use RSSI from scan
+        if (!success) {
+            if (peripherals[i].last_rssi != 0) {
+                rssi = peripherals[i].last_rssi;
+                LOG_INF("Peripheral %d RSSI: %d dBm (from scan, HCI failed)", i, rssi);
+            } else {
+                LOG_WRN("No RSSI available for slot %d", i);
+                continue;
+            }
+        } else {
+            peripherals[i].last_rssi = rssi;
+        }
         
         raise_zmk_split_peripheral_rssi_changed(
             (struct zmk_split_peripheral_rssi_changed){
@@ -274,8 +289,6 @@ static void read_rssi_work_handler(struct k_work *work) {
                 .rssi = rssi
             }
         );
-        
-        net_buf_unref(rsp);
     }
 
     k_work_schedule(&read_rssi_work, K_MSEC(RSSI_READ_INTERVAL_MS));
