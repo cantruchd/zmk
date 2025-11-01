@@ -52,56 +52,63 @@ static void draw_background(lv_obj_t *canvas) {
 
 static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     lv_draw_line_dsc_t line_dsc;
-    lv_draw_line_dsc_t grid_dsc;
     lv_draw_label_dsc_t text_dsc;
+    lv_draw_label_dsc_t small_text_dsc;
 
     init_line_dsc(&line_dsc, LVGL_FOREGROUND, 1);
-    init_line_dsc(&grid_dsc, LVGL_FOREGROUND, 1);
-    init_label_dsc(&text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_LEFT);
+    init_label_dsc(&text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_10, LV_TEXT_ALIGN_CENTER);
+    init_label_dsc(&small_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_10, LV_TEXT_ALIGN_LEFT);
 
     // Vẽ nền đen
     draw_background(canvas);
 
-    // === VẼ BORDER ===
-    lv_point_t border_points[5];
-    // Top
-    border_points[0] = (lv_point_t){0, 0};
-    border_points[1] = (lv_point_t){WPM_GRAPH_WIDTH - 1, 0};
+    // === VẼ MAX WPM Ở TRÊN CÙNG ===
+    char text_buf[16];
+    snprintf(text_buf, sizeof(text_buf), "Max: %d", max_wpm);
+    lv_canvas_draw_text(canvas, 0, 1, CANVAS_SIZE, &text_dsc, text_buf);
+
+    // === VẼ KHUNG VÀ GRAPH Ở GIỮA ===
+    const int graph_top = 14;      // Sau text max
+    const int graph_height = 38;   // Chiều cao vùng graph
+    const int graph_left = 2;
+    const int graph_width = CANVAS_SIZE - 4;
+    const int graph_bottom = graph_top + graph_height;
+
+    // Vẽ border khung
+    lv_point_t border_points[2];
+    
+    // Top border
+    border_points[0] = (lv_point_t){graph_left, graph_top};
+    border_points[1] = (lv_point_t){graph_left + graph_width, graph_top};
     lv_canvas_draw_line(canvas, border_points, 2, &line_dsc);
     
-    // Right
-    border_points[0] = (lv_point_t){WPM_GRAPH_WIDTH - 1, 0};
-    border_points[1] = (lv_point_t){WPM_GRAPH_WIDTH - 1, WPM_GRAPH_HEIGHT - 1};
+    // Right border
+    border_points[0] = (lv_point_t){graph_left + graph_width, graph_top};
+    border_points[1] = (lv_point_t){graph_left + graph_width, graph_bottom};
     lv_canvas_draw_line(canvas, border_points, 2, &line_dsc);
     
-    // Bottom
-    border_points[0] = (lv_point_t){WPM_GRAPH_WIDTH - 1, WPM_GRAPH_HEIGHT - 1};
-    border_points[1] = (lv_point_t){0, WPM_GRAPH_HEIGHT - 1};
+    // Bottom border
+    border_points[0] = (lv_point_t){graph_left + graph_width, graph_bottom};
+    border_points[1] = (lv_point_t){graph_left, graph_bottom};
     lv_canvas_draw_line(canvas, border_points, 2, &line_dsc);
     
-    // Left
-    border_points[0] = (lv_point_t){0, WPM_GRAPH_HEIGHT - 1};
-    border_points[1] = (lv_point_t){0, 0};
+    // Left border
+    border_points[0] = (lv_point_t){graph_left, graph_bottom};
+    border_points[1] = (lv_point_t){graph_left, graph_top};
     lv_canvas_draw_line(canvas, border_points, 2, &line_dsc);
 
     // Tìm giá trị max để scale
-    uint8_t scale_max = max_wpm > 20 ? max_wpm : 20; // Tối thiểu 20
+    uint8_t scale_max = max_wpm > 20 ? max_wpm : 20;
 
-    // === VẼ GRID LINES (25%, 50%, 75%) ===
-    // Grid line màu xám nhạt hơn
-    lv_draw_line_dsc_t grid_line_dsc;
-    init_line_dsc(&grid_line_dsc, LVGL_FOREGROUND, 1);
-    // Để tạo màu xám nhạt, ta vẽ đứt nét hoặc chấm chấm
-    // Vì LVGL không hỗ trợ dash trực tiếp trên canvas, ta vẽ các chấm nhỏ
-    
-    const int inner_height = WPM_GRAPH_HEIGHT - 4; // Trừ border + padding
-    const int inner_top = 2;
+    // === VẼ GRID LINES (25%, 50%, 75%) trong khung ===
+    const int inner_graph_height = graph_height - 2;
+    const int inner_graph_top = graph_top + 1;
     
     for (int grid = 1; grid <= 3; grid++) {
-        int y = inner_top + (inner_height * grid / 4);
+        int y = inner_graph_top + (inner_graph_height * grid / 4);
         
-        // Vẽ đường đứt nét
-        for (int x = 2; x < WPM_GRAPH_WIDTH - 2; x += 3) {
+        // Vẽ dotted line
+        for (int x = graph_left + 1; x < graph_left + graph_width - 1; x += 3) {
             lv_draw_rect_dsc_t dot_dsc;
             init_rect_dsc(&dot_dsc, LVGL_FOREGROUND);
             lv_canvas_draw_rect(canvas, x, y, 1, 1, &dot_dsc);
@@ -109,19 +116,19 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     }
 
     // === VẼ GRAPH LINE ===
-    const int graph_width = WPM_GRAPH_WIDTH - 4; // Trừ border + padding
-    const int graph_height = WPM_GRAPH_HEIGHT - 4;
-    const int graph_left = 2;
-    const int graph_top = 2;
+    const int plot_width = graph_width - 4;
+    const int plot_height = graph_height - 4;
+    const int plot_left = graph_left + 2;
+    const int plot_top = graph_top + 2;
 
     lv_point_t graph_points[MAX_WPM_POINTS];
     for (int i = 0; i < MAX_WPM_POINTS; i++) {
-        int x = graph_left + (i * graph_width / (MAX_WPM_POINTS - 1));
-        int y = graph_top + graph_height - (values[i] * graph_height / (scale_max + 5));
+        int x = plot_left + (i * plot_width / (MAX_WPM_POINTS - 1));
+        int y = plot_top + plot_height - (values[i] * plot_height / (scale_max + 5));
         
-        // Clamp y trong vùng vẽ
-        if (y < graph_top) y = graph_top;
-        if (y > graph_top + graph_height) y = graph_top + graph_height;
+        // Clamp y
+        if (y < plot_top) y = plot_top;
+        if (y > plot_top + plot_height) y = plot_top + plot_height;
         
         graph_points[i] = (lv_point_t){x, y};
     }
@@ -132,8 +139,8 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
         lv_canvas_draw_line(canvas, line_pts, 2, &line_dsc);
     }
 
-    // === VẼ TEXT (Max và Avg) ===
-    char text_buf[12];
+    // === VẼ TEXT DƯỚI CÙNG ===
+    const int bottom_text_y = graph_bottom + 3;
     
     // Tính Average (chỉ từ WPM > 0)
     uint8_t avg_wpm = 0;
@@ -141,19 +148,15 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
         avg_wpm = avg_wpm_sum / avg_wpm_count;
     }
 
-    // Max WPM - góc trên phải
-    snprintf(text_buf, sizeof(text_buf), "M %d", max_wpm);
-    lv_canvas_draw_text(canvas, 0, 1, CANVAS_SIZE, &text_dsc, text_buf);
+    // Avg WPM - bên trái
+    snprintf(text_buf, sizeof(text_buf), "Avg:%d", avg_wpm);
+    lv_canvas_draw_text(canvas, 2, bottom_text_y, 35, &small_text_dsc, text_buf);
     
-    // Avg WPM - góc dưới phải
-    snprintf(text_buf, sizeof(text_buf), "A %d", avg_wpm);
-    lv_canvas_draw_text(canvas, 0, WPM_GRAPH_HEIGHT - 19, CANVAS_SIZE, &text_dsc, text_buf);
-
-    // Current WPM - số lớn ở giữa bên trái
-    lv_draw_label_dsc_t large_text_dsc;
-    init_label_dsc(&large_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_LEFT);
-    snprintf(text_buf, sizeof(text_buf), "%d", values[MAX_WPM_POINTS - 1]);
-    lv_canvas_draw_text(canvas, 4, WPM_GRAPH_HEIGHT / 2 - 7, 30, &large_text_dsc, text_buf);
+    // Current WPM - bên phải
+    lv_draw_label_dsc_t right_text_dsc;
+    init_label_dsc(&right_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_10, LV_TEXT_ALIGN_RIGHT);
+    snprintf(text_buf, sizeof(text_buf), "Cur:%d", values[MAX_WPM_POINTS - 1]);
+    lv_canvas_draw_text(canvas, 0, bottom_text_y, CANVAS_SIZE - 2, &right_text_dsc, text_buf);
 }
 
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
@@ -296,9 +299,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, 160, 68);
 
-    
-
-    // Top canvas
+    // Top canvas (Battery + Connection)
     lv_obj_t *top = lv_canvas_create(widget->obj);
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
@@ -307,7 +308,6 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_t *wpm_canvas = lv_canvas_create(widget->obj);
     lv_obj_align(wpm_canvas, LV_ALIGN_TOP_LEFT, 37+18, 0);
     lv_canvas_set_buffer(wpm_canvas, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
-    
 
     widget->state.battery = 0;
     widget->state.charging = false;
@@ -328,11 +328,10 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget_peripheral_status_init();
     widget_wpm_status_init();
 
-    
     draw_top(widget->obj, widget->cbuf, &widget->state);   
     draw_wpm(widget->obj, widget->cbuf2, &widget->state);
     
-    LOG_INF("Peripheral WPM widget initialized with border, grid, max/avg display");
+    LOG_INF("Peripheral WPM widget initialized - Layout: Max(top) | Graph(middle) | Avg+Cur(bottom)");
     return 0;
 }
 
