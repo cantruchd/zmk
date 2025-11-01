@@ -307,8 +307,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
 
-    // Đưa WPM lên trên cùng → không bị top che
-    lv_obj_move_foreground(wpm_canvas);
+    
 
     widget->state.battery = 0;
     widget->state.charging = false;
@@ -332,6 +331,9 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     draw_wpm(widget->obj, widget->cbuf2, &widget->state);
     draw_top(widget->obj, widget->cbuf, &widget->state);
 
+    // Đưa WPM lên trên cùng → không bị top che
+    lv_obj_move_foreground(wpm_canvas);
+    
     LOG_INF("Peripheral WPM widget initialized with border, grid, max/avg display");
     return 0;
 }
