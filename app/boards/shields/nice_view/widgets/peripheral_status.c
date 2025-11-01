@@ -165,7 +165,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     init_rect_dsc(&rect_black_dsc, LVGL_BACKGROUND);
 
     // Nền đen
-    lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &rect_black_dsc);
+    lv_canvas_draw_rect(canvas, 0, 0, 37, CANVAS_SIZE, &rect_black_dsc);
 
     draw_battery(canvas, state);
     lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &label_dsc,
@@ -304,7 +304,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     // Top canvas
     lv_obj_t *top = lv_canvas_create(widget->obj);
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
-    lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
+    lv_canvas_set_buffer(top, widget->cbuf, 37, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
 
     
@@ -329,10 +329,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget_wpm_status_init();
 
     draw_wpm(widget->obj, widget->cbuf2, &widget->state);
-    draw_top(widget->obj, widget->cbuf, &widget->state);
-
-    // Đưa WPM lên trên cùng → không bị top che
-    lv_obj_move_foreground(wpm_canvas);
+    draw_top(widget->obj, widget->cbuf, &widget->state);   
     
     LOG_INF("Peripheral WPM widget initialized with border, grid, max/avg display");
     return 0;
