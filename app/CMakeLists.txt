@@ -102,6 +102,18 @@ target_sources_ifdef(CONFIG_ZMK_SPLIT app PRIVATE src/events/split_peripheral_st
 target_sources_ifdef(CONFIG_ZMK_SPLIT app PRIVATE src/events/split_wpm_state_changed.c)
 # =================================================
 
+# ========== THÊM PHẦN NÀY CHO RSSI SPLIT ========== ← MỚI
+# Event cho split RSSI - chỉ build cho central role
+if(CONFIG_ZMK_SPLIT AND (NOT CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL))
+  target_sources(app PRIVATE src/events/split_peripheral_rssi_changed.c)
+endif()
+
+# Peripheral advertising cho RSSI monitoring - chỉ build cho peripheral role
+if(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)
+  target_sources(app PRIVATE src/split/bluetooth/peripheral_rssi_advertise.c)
+endif()
+# ==================================================
+
 add_subdirectory_ifdef(CONFIG_ZMK_SPLIT src/split)
 
 # ========== THÊM PHẦN NÀY CHO WPM CENTRAL BROADCASTER ==========

@@ -4,14 +4,11 @@
  * SPDX-License-Identifier: MIT
  *
  */
-
 #include <lvgl.h>
 #include <zmk/endpoints.h>
 
 #define NICEVIEW_PROFILE_COUNT 5
-
 #define CANVAS_SIZE 68
-
 #define LVGL_BACKGROUND                                                                            \
     IS_ENABLED(CONFIG_NICE_VIEW_WIDGET_INVERTED) ? lv_color_black() : lv_color_white()
 #define LVGL_FOREGROUND                                                                            \
@@ -30,9 +27,10 @@ struct status_state {
     uint8_t layer_index;
     const char *layer_label;
     uint8_t wpm[10];
+    int8_t peripheral_rssi[ZMK_SPLIT_BLE_PERIPHERAL_COUNT];  // ← THÊM: RSSI của peripheral
 #else
     bool connected;
-    uint8_t wpm[10];  // THÊM DÒNG NÀY cho peripheral
+    uint8_t wpm[10];
 #endif
 };
 
