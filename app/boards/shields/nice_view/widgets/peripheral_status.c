@@ -64,8 +64,8 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
 
     // === VẼ MAX WPM Ở TRÊN CÙNG ===
     char text_buf[16];
-    snprintf(text_buf, sizeof(text_buf), "Max: %d", max_wpm);
-    lv_canvas_draw_text(canvas, 0, 1, CANVAS_SIZE, &text_dsc, text_buf);
+    snprintf(text_buf, sizeof(text_buf), "M %d", max_wpm);
+    lv_canvas_draw_text(canvas, 0, 4, CANVAS_SIZE, &text_dsc, text_buf);
 
     // === VẼ KHUNG VÀ GRAPH Ở GIỮA ===
     const int graph_top = 14;      // Sau text max
@@ -149,14 +149,14 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     }
 
     // Avg WPM - bên trái
-    snprintf(text_buf, sizeof(text_buf), "Avg:%d", avg_wpm);
-    lv_canvas_draw_text(canvas, 2, bottom_text_y, 35, &small_text_dsc, text_buf);
+    snprintf(text_buf, sizeof(text_buf), "A %d", avg_wpm);
+    lv_canvas_draw_text(canvas, 2, bottom_text_y-2, 35, &small_text_dsc, text_buf);
     
     // Current WPM - bên phải
     lv_draw_label_dsc_t right_text_dsc;
     init_label_dsc(&right_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_RIGHT);
-    snprintf(text_buf, sizeof(text_buf), "Cur:%d", values[MAX_WPM_POINTS - 1]);
-    lv_canvas_draw_text(canvas, 0, bottom_text_y, CANVAS_SIZE - 2, &right_text_dsc, text_buf);
+    snprintf(text_buf, sizeof(text_buf), "%d", values[MAX_WPM_POINTS - 1]);
+    lv_canvas_draw_text(canvas, 0, bottom_text_y-2, CANVAS_SIZE - 4, &right_text_dsc, text_buf);
 }
 
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
