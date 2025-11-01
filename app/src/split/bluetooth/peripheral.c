@@ -1,226 +1,283 @@
 /*
- * Copyright (c) 2024 The ZMK Contributors
+ * Copyright (c) 2022 The ZMK Contributors
  *
  * SPDX-License-Identifier: MIT
  */
 
-#include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/init.h>
+
+#include <errno.h>
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include <zephyr/settings/settings.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/hci_types.h>
+
+#include "peripheral.h"
+#include "service.h"
+
+#if IS_ENABLED(CONFIG_SETTINGS)
+
+#include <zephyr/settings/settings.h>
+
+#endif
+
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
-#include <zmk/display.h>
 #include <zmk/event_manager.h>
-#include <zmk/events/wpm_state_changed.h>
-#include <zmk/wpm.h>
+#include <zmk/events/split_peripheral_status_changed.h>
+#include <zmk/ble.h>
+#include <zmk/split/bluetooth/uuid.h>
 
-#include "wpm_status.h"
+static const struct bt_data zmk_ble_ad[] = {
+    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+    BT_DATA_BYTES(BT_DATA_UUID16_SOME, 0x0f, 0x18 /* Battery Service */
+                  ),
+    BT_DATA_BYTES(BT_DATA_UUID128_ALL, ZMK_SPLIT_BT_SERVICE_UUID)};
 
-static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
+static bool is_connected = false;
 
-struct wpm_status_state {
-    uint8_t wpm;
-    uint8_t max_wpm;
-    uint32_t avg_wpm_sum;
-    uint16_t avg_wpm_count;
+static bool is_bonded = false;
+
+static void each_bond(const struct bt_bond_info *info, void *user_data) {
+    bt_addr_le_t *addr = (bt_addr_le_t *)user_data;
+
+    if (bt_addr_le_cmp(&info->addr, BT_ADDR_LE_NONE) != 0) {
+        bt_addr_le_copy(addr, &info->addr);
+    }
+}
+
+static int start_advertising(bool low_duty) {
+    bt_addr_le_t central_addr = bt_addr_le_none;
+
+    bt_foreach_bond(BT_ID_DEFAULT, each_bond, &central_addr);
+
+    if (bt_addr_le_cmp(&central_addr, BT_ADDR_LE_NONE) != 0) {
+        is_bonded = true;
+        struct bt_le_adv_param adv_param = low_duty ? *BT_LE_ADV_CONN_DIR_LOW_DUTY(&central_addr)
+                                                    : *BT_LE_ADV_CONN_DIR(&central_addr);
+        return bt_le_adv_start(&adv_param, NULL, 0, NULL, 0);
+    } else {
+        is_bonded = false;
+        return bt_le_adv_start(BT_LE_ADV_CONN, zmk_ble_ad, ARRAY_SIZE(zmk_ble_ad), NULL, 0);
+    }
 };
 
-// Lưu lịch sử WPM cho graph (60 điểm = 60 giây)
-#define WPM_HISTORY_SIZE 60
-static uint8_t wpm_history[WPM_HISTORY_SIZE] = {0};
-static uint8_t wpm_history_index = 0;
+static bool low_duty_advertising = false;
+static bool enabled = false;
 
-static void set_wpm_status_state(lv_obj_t *widget, struct wpm_status_state state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 0);
-    if (canvas == NULL) {
-        return;
-    }
-
-    lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_COVER);
-
-    // Kích thước canvas
-    const int width = 128;
-    const int height = 32;
-    
-    // Vùng vẽ graph (để chỗ cho text bên phải)
-    const int graph_width = 85;
-    const int graph_height = height - 2; // -2 cho border
-    const int graph_x = 1; // Bắt đầu sau border trái
-    const int graph_y = 1; // Bắt đầu sau border trên
-
-    // === VẼ BORDER ===
-    // Border ngoài (toàn bộ canvas)
-    lv_draw_line_dsc_t line_dsc;
-    lv_draw_line_dsc_init(&line_dsc);
-    line_dsc.color = lv_color_white();
-    line_dsc.width = 1;
-    
-    // Top border
-    lv_point_t top_line[] = {{0, 0}, {width - 1, 0}};
-    lv_canvas_draw_line(canvas, top_line, 2, &line_dsc);
-    
-    // Bottom border
-    lv_point_t bottom_line[] = {{0, height - 1}, {width - 1, height - 1}};
-    lv_canvas_draw_line(canvas, bottom_line, 2, &line_dsc);
-    
-    // Left border
-    lv_point_t left_line[] = {{0, 0}, {0, height - 1}};
-    lv_canvas_draw_line(canvas, left_line, 2, &line_dsc);
-    
-    // Right border
-    lv_point_t right_line[] = {{width - 1, 0}, {width - 1, height - 1}};
-    lv_canvas_draw_line(canvas, right_line, 2, &line_dsc);
-
-    // === VẼ GRID LINES (25%, 50%, 75%) ===
-    lv_draw_line_dsc_t grid_dsc;
-    lv_draw_line_dsc_init(&grid_dsc);
-    grid_dsc.color = lv_color_make(80, 80, 80); // Màu xám nhạt
-    grid_dsc.width = 1;
-    
-    // Tìm max để scale
-    uint8_t max_for_scale = state.max_wpm;
-    if (max_for_scale < 20) max_for_scale = 20; // Min scale
-    
-    // Vẽ 3 vạch ngang: 25%, 50%, 75% của max
-    for (int i = 1; i <= 3; i++) {
-        int y_pos = graph_y + (graph_height * i / 4);
-        lv_point_t grid_line[] = {
-            {graph_x, y_pos},
-            {graph_x + graph_width - 1, y_pos}
-        };
-        lv_canvas_draw_line(canvas, grid_line, 2, &grid_dsc);
-    }
-
-    // === VẼ GRAPH ===
-    lv_draw_line_dsc_t graph_line_dsc;
-    lv_draw_line_dsc_init(&graph_line_dsc);
-    graph_line_dsc.color = lv_color_white();
-    graph_line_dsc.width = 1;
-
-    // Vẽ lịch sử WPM
-    for (int i = 1; i < WPM_HISTORY_SIZE; i++) {
-        int prev_idx = (wpm_history_index + i - 1) % WPM_HISTORY_SIZE;
-        int curr_idx = (wpm_history_index + i) % WPM_HISTORY_SIZE;
-        
-        uint8_t prev_wpm = wpm_history[prev_idx];
-        uint8_t curr_wpm = wpm_history[curr_idx];
-        
-        if (prev_wpm == 0 && curr_wpm == 0) continue;
-        
-        // Scale theo max_wpm
-        int prev_y = graph_y + graph_height - 
-                     (prev_wpm * graph_height / (max_for_scale + 5));
-        int curr_y = graph_y + graph_height - 
-                     (curr_wpm * graph_height / (max_for_scale + 5));
-        
-        // Map index to x position (từ trái sang phải, mới nhất ở phải)
-        int prev_x = graph_x + ((i - 1) * (graph_width - 1) / (WPM_HISTORY_SIZE - 1));
-        int curr_x = graph_x + (i * (graph_width - 1) / (WPM_HISTORY_SIZE - 1));
-        
-        lv_point_t line[] = {{prev_x, prev_y}, {curr_x, curr_y}};
-        lv_canvas_draw_line(canvas, line, 2, &graph_line_dsc);
-    }
-
-    // === VẼ TEXT (Max và Avg) ===
-    lv_draw_label_dsc_t label_dsc;
-    lv_draw_label_dsc_init(&label_dsc);
-    label_dsc.color = lv_color_white();
-    label_dsc.font = &lv_font_montserrat_16;
-
-    char text_buf[16];
-    
-    // Vẽ Max WPM (góc trên bên phải)
-    snprintf(text_buf, sizeof(text_buf), "M%3d", state.max_wpm);
-    lv_canvas_draw_text(canvas, graph_x + graph_width + 3, 3, 40, &label_dsc, text_buf);
-    
-    // Tính Average WPM
-    uint8_t avg_wpm = 0;
-    if (state.avg_wpm_count > 0) {
-        avg_wpm = state.avg_wpm_sum / state.avg_wpm_count;
-    }
-    
-    // Vẽ Avg WPM (góc dưới bên phải)
-    snprintf(text_buf, sizeof(text_buf), "A%3d", avg_wpm);
-    lv_canvas_draw_text(canvas, graph_x + graph_width + 3, height - 13, 40, &label_dsc, text_buf);
-
-    // === VẼ CURRENT WPM (số lớn ở giữa text area) ===
-    label_dsc.font = &lv_font_montserrat_16;
-    snprintf(text_buf, sizeof(text_buf), "%3d", state.wpm);
-    lv_canvas_draw_text(canvas, graph_x + graph_width + 5, height / 2 - 7, 40, &label_dsc, text_buf);
-}
-
-static void wpm_status_update_cb(struct wpm_status_state state) {
-    struct zmk_widget_wpm_status *widget;
-    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
-        set_wpm_status_state(widget->obj, state);
+static void advertising_cb(struct k_work *work) {
+    const int err = start_advertising(low_duty_advertising);
+    if (err < 0) {
+        LOG_ERR("Failed to start advertising (%d)", err);
     }
 }
 
-ZMK_DISPLAY_WIDGET_LISTENER(widget_wpm_status, struct wpm_status_state,
-                             wpm_status_update_cb, NULL)
+K_WORK_DEFINE(advertising_work, advertising_cb);
 
-ZMK_SUBSCRIPTION(widget_wpm_status, zmk_wpm_state_changed);
+static void connected(struct bt_conn *conn, uint8_t err) {
+    is_connected = (err == 0);
 
-int zmk_widget_wpm_status_init(struct zmk_widget_wpm_status *widget, lv_obj_t *parent) {
-    widget->obj = lv_obj_create(parent);
-    lv_obj_set_size(widget->obj, 128, 32);
+    raise_zmk_split_peripheral_status_changed(
+        (struct zmk_split_peripheral_status_changed){.connected = is_connected});
 
-    // Canvas buffer (128x32 = 4096 pixels, 1 bit per pixel = 512 bytes)
-    static lv_color_t cbuf[LV_CANVAS_BUF_SIZE_TRUE_COLOR(128, 32)];
-    
-    lv_obj_t *canvas = lv_canvas_create(widget->obj);
-    lv_canvas_set_buffer(canvas, cbuf, 128, 32, LV_IMG_CF_TRUE_COLOR);
-    lv_obj_align(canvas, LV_ALIGN_TOP_LEFT, 0, 0);
-    
-    sys_slist_append(&widgets, &widget->node);
+    if (err == BT_HCI_ERR_ADV_TIMEOUT && enabled) {
+        low_duty_advertising = true;
+        k_work_submit(&advertising_work);
+    }
+}
 
-    widget_wpm_status_init();
-    
-    struct wpm_status_state state = {
-        .wpm = zmk_wpm_get_state(),
-        .max_wpm = 0,
-        .avg_wpm_sum = 0,
-        .avg_wpm_count = 0
+static void disconnected(struct bt_conn *conn, uint8_t reason) {
+    char addr[BT_ADDR_LE_STR_LEN];
+
+    bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+    LOG_DBG("Disconnected from %s (reason 0x%02x)", addr, reason);
+
+    is_connected = false;
+
+    raise_zmk_split_peripheral_status_changed(
+        (struct zmk_split_peripheral_status_changed){.connected = is_connected});
+
+    if (enabled) {
+        low_duty_advertising = false;
+        k_work_submit(&advertising_work);
+    }
+}
+
+static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err) {
+    char addr[BT_ADDR_LE_STR_LEN];
+
+    bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+    if (!err) {
+        LOG_DBG("Security changed: %s level %u", addr, level);
+    } else {
+        LOG_ERR("Security failed: %s level %u err %d", addr, level, err);
+    }
+}
+
+static void le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t latency,
+                             uint16_t timeout) {
+    char addr[BT_ADDR_LE_STR_LEN];
+
+    bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+    LOG_DBG("%s: interval %d latency %d timeout %d", addr, interval, latency, timeout);
+}
+
+static struct bt_conn_cb conn_callbacks = {
+    .connected = connected,
+    .disconnected = disconnected,
+    .security_changed = security_changed,
+    .le_param_updated = le_param_updated,
+};
+
+static void auth_pairing_complete(struct bt_conn *conn, bool bonded) { is_bonded = bonded; }
+
+static struct bt_conn_auth_info_cb zmk_peripheral_ble_auth_info_cb = {
+    .pairing_complete = auth_pairing_complete,
+};
+
+bool zmk_split_bt_peripheral_is_connected(void) { return is_connected; }
+
+bool zmk_split_bt_peripheral_is_bonded(void) { return is_bonded; }
+
+static zmk_split_transport_peripheral_status_changed_cb_t transport_status_cb;
+
+static int
+split_peripheral_bt_set_status_callback(zmk_split_transport_peripheral_status_changed_cb_t cb) {
+    transport_status_cb = cb;
+    return 0;
+}
+
+static void find_first_conn(struct bt_conn *conn, void *data) {
+    struct bt_conn **cp = (struct bt_conn **)data;
+
+    *cp = conn;
+}
+
+static int split_peripheral_bt_set_enabled(bool en) {
+    int err;
+
+    enabled = en;
+    if (en) {
+        k_work_submit(&advertising_work);
+        return 0;
+    } else {
+        struct bt_conn *conn = NULL;
+        bt_conn_foreach(BT_CONN_TYPE_LE, find_first_conn, &conn);
+        if (conn) {
+            err = bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+            if (err < 0) {
+                LOG_WRN("Failed to disconnect connection to central (%d)", err);
+            }
+        }
+
+        err = bt_le_adv_stop();
+
+        if (err < 0) {
+            LOG_WRN("Failed to stop advertising (%d)", err);
+        }
+
+        return 0;
+    }
+}
+
+static void notify_transport_status(void);
+
+static void notify_status_work_cb(struct k_work *_work) { notify_transport_status(); }
+
+static K_WORK_DEFINE(notify_status_work, notify_status_work_cb);
+
+static bool settings_loaded = false;
+
+static struct zmk_split_transport_status split_peripheral_bt_get_status(void) {
+    return (struct zmk_split_transport_status){
+        .available = !IS_ENABLED(CONFIG_ZMK_BLE_CLEAR_BONDS_ON_START) && settings_loaded,
+        .enabled = enabled,
+        .connections = zmk_split_bt_peripheral_is_connected()
+                           ? ZMK_SPLIT_TRANSPORT_CONNECTIONS_STATUS_ALL_CONNECTED
+                           : ZMK_SPLIT_TRANSPORT_CONNECTIONS_STATUS_DISCONNECTED,
     };
-    set_wpm_status_state(widget->obj, state);
+}
+
+static const struct zmk_split_transport_peripheral_api peripheral_api = {
+    .report_event = zmk_split_transport_peripheral_bt_report_event,
+    .set_enabled = split_peripheral_bt_set_enabled,
+    .set_status_callback = split_peripheral_bt_set_status_callback,
+    .get_status = split_peripheral_bt_get_status,
+};
+
+ZMK_SPLIT_TRANSPORT_PERIPHERAL_REGISTER(bt_peripheral, &peripheral_api,
+                                        CONFIG_ZMK_SPLIT_BLE_PRIORITY);
+
+struct zmk_split_transport_peripheral *zmk_split_transport_peripheral_bt(void) {
+    return &bt_peripheral;
+}
+
+static void notify_transport_status(void) {
+    if (transport_status_cb) {
+        transport_status_cb(&bt_peripheral, split_peripheral_bt_get_status());
+    }
+}
+
+static int zmk_peripheral_ble_complete_startup(void) {
+#if IS_ENABLED(CONFIG_ZMK_BLE_CLEAR_BONDS_ON_START)
+    LOG_WRN("Clearing all existing BLE bond information from the keyboard");
+
+    bt_unpair(BT_ID_DEFAULT, NULL);
+#else
+    bt_conn_cb_register(&conn_callbacks);
+    bt_conn_auth_info_cb_register(&zmk_peripheral_ble_auth_info_cb);
+
+    low_duty_advertising = false;
+
+    settings_loaded = true;
+    k_work_submit(&notify_status_work);
+#endif
 
     return 0;
 }
 
-lv_obj_t *zmk_widget_wpm_status_obj(struct zmk_widget_wpm_status *widget) {
-    return widget->obj;
+#if IS_ENABLED(CONFIG_SETTINGS)
+
+static int peripheral_ble_handle_set(const char *name, size_t len, settings_read_cb read_cb,
+                                     void *cb_arg) {
+    return 0;
 }
 
-// Update handler khi nhận event WPM changed
-static int widget_wpm_status_event_listener(const zmk_event_t *eh) {
-    const struct zmk_wpm_state_changed *ev = as_zmk_wpm_state_changed(eh);
-    if (ev == NULL) {
-        return ZMK_EV_EVENT_BUBBLE;
+static struct settings_handler ble_peripheral_settings_handler = {
+    .name = "ble_peripheral",
+    .h_set = peripheral_ble_handle_set,
+    .h_commit = zmk_peripheral_ble_complete_startup};
+
+#endif // IS_ENABLED(CONFIG_SETTINGS)
+
+static int zmk_peripheral_ble_init(void) {
+    int err = bt_enable(NULL);
+
+    if (err) {
+        LOG_ERR("BLUETOOTH FAILED (%d)", err);
+        return err;
     }
 
-    static struct wpm_status_state state = {0};
-    
-    state.wpm = ev->state;
-    
-    // Update max
-    if (state.wpm > state.max_wpm) {
-        state.max_wpm = state.wpm;
-    }
-    
-    // Update average (chỉ tính WPM > 0)
-    if (state.wpm > 0) {
-        state.avg_wpm_sum += state.wpm;
-        state.avg_wpm_count++;
-    }
-    
-    // Thêm vào history
-    wpm_history[wpm_history_index] = state.wpm;
-    wpm_history_index = (wpm_history_index + 1) % WPM_HISTORY_SIZE;
-    
-    wpm_status_update_cb(state);
-    
-    return ZMK_EV_EVENT_BUBBLE;
+#if IS_ENABLED(CONFIG_SETTINGS)
+    settings_register(&ble_peripheral_settings_handler);
+#else
+    zmk_peripheral_ble_complete_startup();
+#endif
+
+    return 0;
 }
 
-ZMK_LISTENER(widget_wpm_status_event, widget_wpm_status_event_listener);
-ZMK_SUBSCRIPTION(widget_wpm_status_event, zmk_wpm_state_changed);
+SYS_INIT(zmk_peripheral_ble_init, APPLICATION, CONFIG_ZMK_BLE_INIT_PRIORITY);
