@@ -420,7 +420,7 @@ int confirm_peripheral_slot_conn(struct bt_conn *conn) {
     peripherals[idx].state = PERIPHERAL_SLOT_STATE_CONNECTED;
     
     // ← THÊM: Bắt đầu đọc RSSI
-    k_work_schedule(&read_rssi_work, K_MSEC(RSSI_READ_INTERVAL_MS));
+    k_work_schedule(&read_rssi_work, K_MSEC(RSSI_FAST_INTERVAL_MS));
     
     return 0;
 }
