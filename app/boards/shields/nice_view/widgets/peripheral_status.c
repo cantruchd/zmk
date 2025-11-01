@@ -56,8 +56,8 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     lv_draw_label_dsc_t small_text_dsc;
 
     init_line_dsc(&line_dsc, LVGL_FOREGROUND, 1);
-    init_label_dsc(&text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_10, LV_TEXT_ALIGN_CENTER);
-    init_label_dsc(&small_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_10, LV_TEXT_ALIGN_LEFT);
+    init_label_dsc(&text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_CENTER);
+    init_label_dsc(&small_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_LEFT);
 
     // Vẽ nền đen
     draw_background(canvas);
@@ -154,7 +154,7 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     
     // Current WPM - bên phải
     lv_draw_label_dsc_t right_text_dsc;
-    init_label_dsc(&right_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_10, LV_TEXT_ALIGN_RIGHT);
+    init_label_dsc(&right_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_RIGHT);
     snprintf(text_buf, sizeof(text_buf), "Cur:%d", values[MAX_WPM_POINTS - 1]);
     lv_canvas_draw_text(canvas, 0, bottom_text_y, CANVAS_SIZE - 2, &right_text_dsc, text_buf);
 }
