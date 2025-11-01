@@ -68,10 +68,10 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &text_dsc, text_buf);
 
     // === VẼ KHUNG VÀ GRAPH Ở GIỮA ===
-    const int graph_top = 14+1;      // Sau text max
+    const int graph_top = 13;      // Sau text max
     const int graph_height = 38;   // Chiều cao vùng graph
     const int graph_left = 1;
-    const int graph_width = CANVAS_SIZE - 2;
+    const int graph_width = CANVAS_SIZE - 3;
     const int graph_bottom = graph_top + graph_height;
 
     // Vẽ border khung
@@ -308,7 +308,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
 
     // WPM canvas
     lv_obj_t *wpm_canvas = lv_canvas_create(widget->obj);
-    lv_obj_align(wpm_canvas, LV_ALIGN_TOP_LEFT, 37+18, 0);
+    lv_obj_align(wpm_canvas, LV_ALIGN_TOP_LEFT, 37+19, 0);
     lv_canvas_set_buffer(wpm_canvas, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     widget->state.battery = 0;
