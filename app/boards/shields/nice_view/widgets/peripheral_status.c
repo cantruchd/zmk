@@ -68,7 +68,7 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &text_dsc, text_buf);
 
     // === VẼ KHUNG VÀ GRAPH Ở GIỮA ===
-    const int graph_top = 15;      // Sau text max
+    const int graph_top = 16;      // Sau text max
     const int graph_height = 38;   // Chiều cao vùng graph
     const int graph_left = 1;
     const int graph_width = CANVAS_SIZE - 3;
