@@ -125,7 +125,7 @@ static void set_wpm_status_state(lv_obj_t *widget, struct wpm_status_state state
     lv_draw_label_dsc_t label_dsc;
     lv_draw_label_dsc_init(&label_dsc);
     label_dsc.color = lv_color_white();
-    label_dsc.font = &lv_font_montserrat_10;
+    label_dsc.font = &lv_font_montserrat_16;
 
     char text_buf[16];
     
