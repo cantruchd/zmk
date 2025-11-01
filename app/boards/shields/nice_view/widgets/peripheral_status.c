@@ -157,7 +157,7 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
 }
 
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 1);
+    lv_obj_t *canvas = lv_obj_get_child(widget, 0);
 
     lv_draw_label_dsc_t label_dsc;
     init_label_dsc(&label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_RIGHT);
@@ -175,7 +175,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
 }
 
 static void draw_wpm(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 0);
+    lv_obj_t *canvas = lv_obj_get_child(widget, 1);
     if (!canvas) {
         LOG_ERR("WPM canvas not found!");
         return;
@@ -296,17 +296,17 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, 160, 68);
 
-    // WPM canvas
-    lv_obj_t *wpm_canvas = lv_canvas_create(widget->obj);
-    lv_obj_align(wpm_canvas, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_canvas_set_buffer(wpm_canvas, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
+    
 
     // Top canvas
     lv_obj_t *top = lv_canvas_create(widget->obj);
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
-    lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
+    lv_canvas_set_buffer(top, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
-
+    // WPM canvas
+    lv_obj_t *wpm_canvas = lv_canvas_create(widget->obj);
+    lv_obj_align(wpm_canvas, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_canvas_set_buffer(wpm_canvas, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
     
 
     widget->state.battery = 0;
@@ -328,8 +328,9 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget_peripheral_status_init();
     widget_wpm_status_init();
 
-    draw_wpm(widget->obj, widget->cbuf2, &widget->state);
-    draw_top(widget->obj, widget->cbuf, &widget->state);   
+    
+    draw_top(widget->obj, widget->cbuf2, &widget->state);   
+    draw_wpm(widget->obj, widget->cbuf, &widget->state);
     
     LOG_INF("Peripheral WPM widget initialized with border, grid, max/avg display");
     return 0;
