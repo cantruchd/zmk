@@ -311,8 +311,12 @@ static void read_rssi_work_handler(struct k_work *work) {
 }
 
 
-// Gọi khi có key press
-static void on_position_state_changed(void) {
+// // Gọi khi có key press
+// static void on_position_state_changed(void) {
+//     last_activity_time = k_uptime_get();
+// }
+
+static void on_key_press(void) {    
     last_activity_time = k_uptime_get();
 }
 
