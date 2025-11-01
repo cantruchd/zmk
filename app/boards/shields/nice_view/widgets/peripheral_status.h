@@ -9,15 +9,7 @@
 #include <zephyr/kernel.h>
 #include "util.h"
 
-#define MAX_WPM_POINTS 60
 #define CANVAS_SIZE 68
-
-struct status_state {
-    uint8_t battery;
-    bool charging;
-    bool connected;
-    uint8_t wpm[MAX_WPM_POINTS];
-};
 
 struct zmk_widget_status {
     sys_snode_t node;
