@@ -159,11 +159,7 @@ K_WORK_DEFINE(peripheral_event_work, peripheral_event_work_callback);
 static void read_rssi_work_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(read_rssi_work, read_rssi_work_handler);
 
-#define RSSI_FAST_INTERVAL_MS 500
-#define RSSI_SLOW_INTERVAL_MS 5000
-#define RSSI_FAST_DURATION_MS 30000  // Fast mode trong 30s
-
-static int64_t last_activity_time = 0;
+#define RSSI_READ_INTERVAL_MS 500
 
 // ← THÊM: Helper để lấy HCI connection handle từ bt_conn
 // Zephyr không expose handle ra public API, cần dùng trick này
@@ -191,18 +187,6 @@ static uint16_t get_conn_handle(struct bt_conn *conn) {
 }
 
 static void read_rssi_work_handler(struct k_work *work) {
-
-    int64_t now = k_uptime_get();
-    uint32_t interval;
-    
-    // Fast mode trong 30s sau activity
-    if (now - last_activity_time < RSSI_FAST_DURATION_MS) {
-        interval = RSSI_FAST_INTERVAL_MS;
-    } else {
-        interval = RSSI_SLOW_INTERVAL_MS;
-    }
-
-    
     for (int i = 0; i < ZMK_SPLIT_BLE_PERIPHERAL_COUNT; i++) {
         if (peripherals[i].state != PERIPHERAL_SLOT_STATE_CONNECTED || 
             peripherals[i].conn == NULL) {
@@ -307,17 +291,7 @@ static void read_rssi_work_handler(struct k_work *work) {
         );
     }
 
-    k_work_schedule(&read_rssi_work, K_MSEC(interval));
-}
-
-
-// // Gọi khi có key press
-// static void on_position_state_changed(void) {
-//     last_activity_time = k_uptime_get();
-// }
-
-static void on_key_press(void) {    
-    last_activity_time = k_uptime_get();
+    k_work_schedule(&read_rssi_work, K_MSEC(RSSI_READ_INTERVAL_MS));
 }
 
 int peripheral_slot_index_for_conn(struct bt_conn *conn) {
@@ -424,7 +398,7 @@ int confirm_peripheral_slot_conn(struct bt_conn *conn) {
     peripherals[idx].state = PERIPHERAL_SLOT_STATE_CONNECTED;
     
     // ← THÊM: Bắt đầu đọc RSSI
-    k_work_schedule(&read_rssi_work, K_MSEC(RSSI_FAST_INTERVAL_MS));
+    k_work_schedule(&read_rssi_work, K_MSEC(RSSI_READ_INTERVAL_MS));
     
     return 0;
 }
