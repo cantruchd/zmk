@@ -65,13 +65,13 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     // === VẼ MAX WPM Ở TRÊN CÙNG ===
     char text_buf[16];
     snprintf(text_buf, sizeof(text_buf), "M %d", max_wpm);
-    lv_canvas_draw_text(canvas, 0, -1, CANVAS_SIZE, &text_dsc, text_buf);
+    lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &text_dsc, text_buf);
 
     // === VẼ KHUNG VÀ GRAPH Ở GIỮA ===
-    const int graph_top = 14;      // Sau text max
+    const int graph_top = 14+1;      // Sau text max
     const int graph_height = 38;   // Chiều cao vùng graph
-    const int graph_left = 2;
-    const int graph_width = CANVAS_SIZE - 4;
+    const int graph_left = 1;
+    const int graph_width = CANVAS_SIZE - 2;
     const int graph_bottom = graph_top + graph_height;
 
     // Vẽ border khung
