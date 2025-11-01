@@ -144,7 +144,7 @@ static void set_wpm_status_state(lv_obj_t *widget, struct wpm_status_state state
     lv_canvas_draw_text(canvas, graph_x + graph_width + 3, height - 13, 40, &label_dsc, text_buf);
 
     // === VẼ CURRENT WPM (số lớn ở giữa text area) ===
-    label_dsc.font = &lv_font_montserrat_14;
+    label_dsc.font = &lv_font_montserrat_16;
     snprintf(text_buf, sizeof(text_buf), "%3d", state.wpm);
     lv_canvas_draw_text(canvas, graph_x + graph_width + 5, height / 2 - 7, 40, &label_dsc, text_buf);
 }
