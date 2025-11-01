@@ -142,12 +142,12 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     }
 
     // Max WPM - góc trên phải
-    snprintf(text_buf, sizeof(text_buf), "M%d", max_wpm);
+    snprintf(text_buf, sizeof(text_buf), "M %d", max_wpm);
     lv_canvas_draw_text(canvas, 0, 1, CANVAS_SIZE, &text_dsc, text_buf);
     
     // Avg WPM - góc dưới phải
-    snprintf(text_buf, sizeof(text_buf), "A%d", avg_wpm);
-    lv_canvas_draw_text(canvas, 0, WPM_GRAPH_HEIGHT - 16, CANVAS_SIZE, &text_dsc, text_buf);
+    snprintf(text_buf, sizeof(text_buf), "A %d", avg_wpm);
+    lv_canvas_draw_text(canvas, 0, WPM_GRAPH_HEIGHT - 19, CANVAS_SIZE, &text_dsc, text_buf);
 
     // Current WPM - số lớn ở giữa bên trái
     lv_draw_label_dsc_t large_text_dsc;
