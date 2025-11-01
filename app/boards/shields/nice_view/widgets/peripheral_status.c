@@ -306,6 +306,10 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
+
+    // Đưa WPM lên trên cùng → không bị top che
+    lv_obj_move_foreground(wpm_canvas);
+
     widget->state.battery = 0;
     widget->state.charging = false;
     widget->state.connected = false;
