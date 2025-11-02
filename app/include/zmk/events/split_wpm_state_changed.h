@@ -11,6 +11,7 @@
 
 struct zmk_split_wpm_state_changed {
     uint8_t wpm;
+    uint32_t total_keystrokes;  // ← THÊM: Tổng số phím đã nhấn
 };
 
 ZMK_EVENT_DECLARE(zmk_split_wpm_state_changed);
