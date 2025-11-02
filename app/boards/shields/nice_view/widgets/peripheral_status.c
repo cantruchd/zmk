@@ -62,10 +62,21 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     // Vẽ nền đen
     draw_background(canvas);
 
+    // total word bên trái
+    
+    // Total word - bên phải
+    lv_draw_label_dsc_t right_text_small;
+    init_label_dsc(&right_text_small, LVGL_FOREGROUND, &lv_font_montserrat_8, LV_TEXT_ALIGN_RIGHT);
+
+    
+    char text_small[16];
+    snprintf(text_small, sizeof(text_small), "%d", avg_wpm_sum);
+    lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &right_text_small, text_small);
+
     // === VẼ MAX WPM Ở TRÊN CÙNG ===
     char text_buf[16];
     snprintf(text_buf, sizeof(text_buf), "M %d", max_wpm);
-    lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &text_dsc, text_buf);
+    lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &small_text_dsc, text_buf);
 
     // === VẼ KHUNG VÀ GRAPH Ở GIỮA ===
     const int graph_top = 16;      // Sau text max
