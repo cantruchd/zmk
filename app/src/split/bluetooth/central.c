@@ -159,7 +159,7 @@ K_WORK_DEFINE(peripheral_event_work, peripheral_event_work_callback);
 static void read_rssi_work_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(read_rssi_work, read_rssi_work_handler);
 
-#define RSSI_READ_INTERVAL_MS 500
+#define RSSI_READ_INTERVAL_MS 5000
 
 // ← THÊM: Helper để lấy HCI connection handle từ bt_conn
 // Zephyr không expose handle ra public API, cần dùng trick này

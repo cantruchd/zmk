@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: MIT
  *
  */
-
 #pragma once
-
 #include <lvgl.h>
 #include <zephyr/kernel.h>
 #include "util.h"
+
+#define CANVAS_SIZE 68
 
 struct zmk_widget_status {
     sys_snode_t node;

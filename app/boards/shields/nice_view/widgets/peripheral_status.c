@@ -22,8 +22,10 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "peripheral_status.h"
 
-#define MAX_WPM_POINTS 10
+#define MAX_WPM_POINTS 60
 #define CANVAS_SIZE 68
+#define WPM_GRAPH_WIDTH 68
+#define WPM_GRAPH_HEIGHT 68
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
@@ -34,6 +36,11 @@ struct peripheral_status_state {
 struct wpm_status_state {
     uint8_t wpm;
 };
+
+// Thống kê WPM
+static uint8_t max_wpm = 0;
+static uint32_t avg_wpm_sum = 0;
+static uint16_t avg_wpm_count = 0;
 
 // === Helper functions ===
 
@@ -46,48 +53,127 @@ static void draw_background(lv_obj_t *canvas) {
 static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     lv_draw_line_dsc_t line_dsc;
     lv_draw_label_dsc_t text_dsc;
+    lv_draw_label_dsc_t small_text_dsc;
 
-    init_line_dsc(&line_dsc, LVGL_FOREGROUND, 2);
+    init_line_dsc(&line_dsc, LVGL_FOREGROUND, 1);
     init_label_dsc(&text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_CENTER);
+    init_label_dsc(&small_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_LEFT);
 
     // Vẽ nền đen
     draw_background(canvas);
 
-    // Tìm giá trị max
-    uint8_t max = 1;
-    for (int i = 0; i < MAX_WPM_POINTS; i++) {
-        if (values[i] > max)
-            max = values[i];
+    // total word bên trái
+    
+    // Total word - bên phải
+    lv_draw_label_dsc_t right_text_small;
+    init_label_dsc(&right_text_small, LVGL_FOREGROUND, &lv_font_montserrat_12, LV_TEXT_ALIGN_RIGHT);
+
+    
+    char text_small[16];
+    snprintf(text_small, sizeof(text_small), "%d", avg_wpm_sum);
+    lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &right_text_small, text_small);
+
+    // === VẼ MAX WPM Ở TRÊN CÙNG ===
+    char text_buf[16];
+    snprintf(text_buf, sizeof(text_buf), "M %d", max_wpm);
+    lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &small_text_dsc, text_buf);
+
+    // === VẼ KHUNG VÀ GRAPH Ở GIỮA ===
+    const int graph_top = 16;      // Sau text max
+    const int graph_height = 36;   // Chiều cao vùng graph
+    const int graph_left = 1;
+    const int graph_width = CANVAS_SIZE - 3;
+    const int graph_bottom = graph_top + graph_height;
+
+    // Vẽ border khung
+    lv_point_t border_points[2];
+    
+    // Top border
+    border_points[0] = (lv_point_t){graph_left, graph_top};
+    border_points[1] = (lv_point_t){graph_left + graph_width, graph_top};
+    lv_canvas_draw_line(canvas, border_points, 2, &line_dsc);
+    
+    // Right border
+    border_points[0] = (lv_point_t){graph_left + graph_width, graph_top};
+    border_points[1] = (lv_point_t){graph_left + graph_width, graph_bottom};
+    lv_canvas_draw_line(canvas, border_points, 2, &line_dsc);
+    
+    // Bottom border
+    border_points[0] = (lv_point_t){graph_left + graph_width, graph_bottom};
+    border_points[1] = (lv_point_t){graph_left, graph_bottom};
+    lv_canvas_draw_line(canvas, border_points, 2, &line_dsc);
+    
+    // Left border
+    border_points[0] = (lv_point_t){graph_left, graph_bottom};
+    border_points[1] = (lv_point_t){graph_left, graph_top};
+    lv_canvas_draw_line(canvas, border_points, 2, &line_dsc);
+
+    // Tìm giá trị max để scale
+    uint8_t scale_max = max_wpm > 20 ? max_wpm : 20;
+
+    // === VẼ GRID LINES (25%, 50%, 75%) trong khung ===
+    const int inner_graph_height = graph_height - 2;
+    const int inner_graph_top = graph_top + 1;
+    
+    for (int grid = 1; grid <= 3; grid++) {
+        int y = inner_graph_top + (inner_graph_height * grid / 4);
+        
+        // Vẽ dotted line
+        for (int x = graph_left + 1; x < graph_left + graph_width - 1; x += 3) {
+            lv_draw_rect_dsc_t dot_dsc;
+            init_rect_dsc(&dot_dsc, LVGL_FOREGROUND);
+            lv_canvas_draw_rect(canvas, x, y, 1, 1, &dot_dsc);
+        }
     }
 
-    // Biến đổi để phù hợp chiều cao canvas
-    int x_step = CANVAS_SIZE / (MAX_WPM_POINTS - 1);
-    lv_point_t points[MAX_WPM_POINTS];
+    // === VẼ GRAPH LINE ===
+    const int plot_width = graph_width - 4;
+    const int plot_height = graph_height - 4;
+    const int plot_left = graph_left + 2;
+    const int plot_top = graph_top + 2;
+
+    lv_point_t graph_points[MAX_WPM_POINTS];
     for (int i = 0; i < MAX_WPM_POINTS; i++) {
-        points[i].x = i * x_step;
-        points[i].y = CANVAS_SIZE - ((values[i] * (CANVAS_SIZE - 10)) / max) - 5;
+        int x = plot_left + (i * plot_width / (MAX_WPM_POINTS - 1));
+        int y = plot_top + plot_height - (values[i] * plot_height / (scale_max + 5));
+        
+        // Clamp y
+        if (y < plot_top) y = plot_top;
+        if (y > plot_top + plot_height) y = plot_top + plot_height;
+        
+        graph_points[i] = (lv_point_t){x, y};
     }
 
-    // Vẽ đường WPM
+    // Vẽ đường graph
     for (int i = 0; i < MAX_WPM_POINTS - 1; i++) {
-        lv_point_t line_points[2] = {points[i], points[i + 1]};
-        lv_canvas_draw_line(canvas, line_points, 2, &line_dsc);
+        lv_point_t line_pts[2] = {graph_points[i], graph_points[i + 1]};
+        lv_canvas_draw_line(canvas, line_pts, 2, &line_dsc);
     }
 
-    // Hiển thị số WPM hiện tại ở giữa
-    char wpm_text[8];
-    snprintf(wpm_text, sizeof(wpm_text), "%d", values[MAX_WPM_POINTS - 1]);
-    lv_canvas_draw_text(canvas, 0, CANVAS_SIZE / 2 - 8, CANVAS_SIZE, &text_dsc, wpm_text);
+    // === VẼ TEXT DƯỚI CÙNG ===
+    const int bottom_text_y = graph_bottom + 3;
+    
+    // Tính Average (chỉ từ WPM > 0)
+    uint8_t avg_wpm = 0;
+    if (avg_wpm_count > 0) {
+        avg_wpm = avg_wpm_sum / avg_wpm_count;
+    }
 
-    // Vẽ vạch nhỏ tại điểm cuối
-    lv_draw_rect_dsc_t rect_white_dsc;
-    init_rect_dsc(&rect_white_dsc, LVGL_FOREGROUND);
-    lv_canvas_draw_rect(canvas, points[MAX_WPM_POINTS - 1].x - 1, points[MAX_WPM_POINTS - 1].y - 1,
-                        3, 3, &rect_white_dsc);
+    
+    // Current WPM - bên phải
+    lv_draw_label_dsc_t right_text_dsc;
+    init_label_dsc(&right_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_RIGHT);
+    snprintf(text_buf, sizeof(text_buf), "%d", values[MAX_WPM_POINTS - 1]);
+    lv_canvas_draw_text(canvas, 0, bottom_text_y-3, CANVAS_SIZE, &right_text_dsc, text_buf);
+
+    // Avg WPM - bên trái
+    snprintf(text_buf, sizeof(text_buf), "A %d", avg_wpm);
+    lv_canvas_draw_text(canvas, 0, bottom_text_y-3, CANVAS_SIZE, &small_text_dsc, text_buf);
+    
 }
 
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 1);
+    lv_obj_t *canvas = lv_obj_get_child(widget, 0);
 
     lv_draw_label_dsc_t label_dsc;
     init_label_dsc(&label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_RIGHT);
@@ -105,7 +191,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
 }
 
 static void draw_wpm(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 0);
+    lv_obj_t *canvas = lv_obj_get_child(widget, 1);
     if (!canvas) {
         LOG_ERR("WPM canvas not found!");
         return;
@@ -175,19 +261,34 @@ ZMK_SUBSCRIPTION(widget_peripheral_status, zmk_split_peripheral_status_changed);
 // === WPM ===
 
 static void set_wpm_status(struct zmk_widget_status *widget, struct wpm_status_state state) {
-    LOG_INF("WPM received from central: %d", state.wpm);  // <-- THÊM LOGGING
+    LOG_INF("WPM received from central: %d", state.wpm);
     
+    // Shift array sang trái
     for (int i = 0; i < MAX_WPM_POINTS - 1; i++) {
         widget->state.wpm[i] = widget->state.wpm[i + 1];
     }
     widget->state.wpm[MAX_WPM_POINTS - 1] = state.wpm;
 
-    LOG_INF("Drawing WPM graph with latest value: %d", widget->state.wpm[MAX_WPM_POINTS - 1]);
+    // Cập nhật max
+    if (state.wpm > max_wpm) {
+        max_wpm = state.wpm;
+        LOG_INF("New max WPM: %d", max_wpm);
+    }
+
+    // Cập nhật average (chỉ tính WPM > 0)
+    if (state.wpm > 0) {
+        avg_wpm_sum += state.wpm;
+        avg_wpm_count++;
+    }
+
+    LOG_INF("Drawing WPM graph - Current: %d, Max: %d, Avg: %d", 
+            state.wpm, max_wpm, avg_wpm_count > 0 ? avg_wpm_sum / avg_wpm_count : 0);
+    
     draw_wpm(widget->obj, widget->cbuf2, &widget->state);
 }
 
 static void wpm_status_update_cb(struct wpm_status_state state) {
-    LOG_INF("WPM update callback triggered: %d", state.wpm);  // <-- THÊM LOGGING
+    LOG_INF("WPM update callback triggered: %d", state.wpm);
     struct zmk_widget_status *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         set_wpm_status(widget, state);
@@ -197,7 +298,7 @@ static void wpm_status_update_cb(struct wpm_status_state state) {
 static struct wpm_status_state wpm_status_get_state(const zmk_event_t *eh) {
     const struct zmk_split_wpm_state_changed *ev = as_zmk_split_wpm_state_changed(eh);
     uint8_t wpm_value = (ev != NULL) ? ev->wpm : 0;
-    LOG_INF("Getting WPM state from event: %d", wpm_value);  // <-- THÊM LOGGING
+    LOG_INF("Getting WPM state from event: %d", wpm_value);
     return (struct wpm_status_state){.wpm = wpm_value};
 }
 
@@ -211,33 +312,39 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, 160, 68);
 
-    // WPM canvas
-    lv_obj_t *wpm_canvas = lv_canvas_create(widget->obj);
-    lv_obj_align(wpm_canvas, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_canvas_set_buffer(wpm_canvas, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
-
-    // Top canvas
+    // Top canvas (Battery + Connection)
     lv_obj_t *top = lv_canvas_create(widget->obj);
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
+
+    // WPM canvas
+    lv_obj_t *wpm_canvas = lv_canvas_create(widget->obj);
+    lv_obj_align(wpm_canvas, LV_ALIGN_TOP_LEFT, 37+19, 0);
+    lv_canvas_set_buffer(wpm_canvas, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     widget->state.battery = 0;
     widget->state.charging = false;
     widget->state.connected = false;
 
+    // Khởi tạo WPM array với giá trị 0
     for (int i = 0; i < MAX_WPM_POINTS; i++) {
-        widget->state.wpm[i] = 10 + i * 5;
+        widget->state.wpm[i] = 0;
     }
+
+    // Reset thống kê
+    max_wpm = 0;
+    avg_wpm_sum = 0;
+    avg_wpm_count = 0;
 
     sys_slist_append(&widgets, &widget->node);
     widget_battery_status_init();
     widget_peripheral_status_init();
     widget_wpm_status_init();
 
+    draw_top(widget->obj, widget->cbuf, &widget->state);   
     draw_wpm(widget->obj, widget->cbuf2, &widget->state);
-    draw_top(widget->obj, widget->cbuf, &widget->state);
-
-    LOG_INF("Peripheral WPM widget initialized with graph + black background");
+    
+    LOG_INF("Peripheral WPM widget initialized - Layout: Max(top) | Graph(middle) | Avg+Cur(bottom)");
     return 0;
 }
 
