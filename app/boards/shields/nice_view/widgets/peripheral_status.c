@@ -66,7 +66,7 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     
     // Total word - bên phải
     lv_draw_label_dsc_t right_text_small;
-    init_label_dsc(&right_text_small, LVGL_FOREGROUND, &lv_font_montserrat_8, LV_TEXT_ALIGN_RIGHT);
+    init_label_dsc(&right_text_small, LVGL_FOREGROUND, &lv_font_montserrat_12, LV_TEXT_ALIGN_RIGHT);
 
     
     char text_small[16];
