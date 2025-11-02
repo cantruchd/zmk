@@ -153,11 +153,11 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
     lv_draw_label_dsc_t right_text_dsc;
     init_label_dsc(&right_text_dsc, LVGL_FOREGROUND, &lv_font_montserrat_16, LV_TEXT_ALIGN_RIGHT);
     snprintf(text_buf, sizeof(text_buf), "%d", values[MAX_WPM_POINTS - 1]);
-    lv_canvas_draw_text(canvas, 0, bottom_text_y-5, CANVAS_SIZE, &right_text_dsc, text_buf);
+    lv_canvas_draw_text(canvas, 0, bottom_text_y-3, CANVAS_SIZE, &right_text_dsc, text_buf);
 
     // Avg WPM - bên trái
     snprintf(text_buf, sizeof(text_buf), "A %d", avg_wpm);
-    lv_canvas_draw_text(canvas, 0, bottom_text_y-5, CANVAS_SIZE, &small_text_dsc, text_buf);
+    lv_canvas_draw_text(canvas, 0, bottom_text_y-3, CANVAS_SIZE, &small_text_dsc, text_buf);
     
 }
 
