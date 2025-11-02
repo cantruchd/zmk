@@ -157,7 +157,7 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
 
     // Avg WPM - bên trái
     snprintf(text_buf, sizeof(text_buf), "A %d", avg_wpm);
-    lv_canvas_draw_text(canvas, 2, bottom_text_y-3, CANVAS_SIZE, &small_text_dsc, text_buf);
+    lv_canvas_draw_text(canvas, 4, bottom_text_y-3, CANVAS_SIZE, &small_text_dsc, text_buf);
     
 }
 
