@@ -35,6 +35,7 @@ struct peripheral_status_state {
 
 struct wpm_status_state {
     uint8_t wpm;
+    unint32_t total_keystrokes;
 };
 
 // Thống kê WPM
