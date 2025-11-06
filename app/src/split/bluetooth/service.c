@@ -25,7 +25,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/split/transport/peripheral.h>
 #include <zmk/split/bluetooth/uuid.h>
 #include <zmk/split/bluetooth/service.h>
-#include <zmk/events/split_wpm_state_changed.h>  // ← THÊM
+#include <zmk/events/split_wpm_state_changed.h>
 
 #include "peripheral.h"
 
@@ -140,29 +140,46 @@ static ssize_t split_svc_get_selected_phys_layout(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attrs, buf, len, offset, &selected, sizeof(selected));
 }
 
-// ← THÊM WPM HANDLERS
+// ← WPM + TOTAL KEYSTROKES HANDLERS
 static uint8_t wpm_value = 0;
+static uint32_t total_keystrokes = 0;  // ← THÊM: Lưu total keystrokes
 
 static void split_svc_wpm_received_callback(struct k_work *work) {
-    LOG_INF("Peripheral received WPM from central: %d", wpm_value);
+    LOG_INF("Peripheral received from central: WPM=%d, Total keystrokes=%d", 
+            wpm_value, total_keystrokes);
     
+    // ← THÊM: Raise event với cả 2 giá trị
     raise_zmk_split_wpm_state_changed(
-        (struct zmk_split_wpm_state_changed){.wpm = wpm_value}
+        (struct zmk_split_wpm_state_changed){
+            .wpm = wpm_value,
+            .total_keystrokes = total_keystrokes  // ← THÊM
+        }
     );
 }
 
 static K_WORK_DEFINE(split_svc_wpm_work, split_svc_wpm_received_callback);
 
+// ← THAY ĐỔI: Nhận 5 bytes (1 WPM + 4 total_keystrokes)
 static ssize_t split_svc_receive_wpm(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                                      const void *buf, uint16_t len, uint16_t offset,
                                      uint8_t flags) {
-    if (offset + len > sizeof(uint8_t) || len == 0) {
+    // ← THAY ĐỔI: Kiểm tra length = 5 bytes
+    if (len != 5) {
+        LOG_ERR("Invalid WPM data length: %d (expected 5)", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    if (offset != 0) {
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
     }
 
-    wpm_value = *(uint8_t *)buf;
+    // ← THAY ĐỔI: Unpack 5 bytes
+    const uint8_t *data = (const uint8_t *)buf;
     
-    LOG_DBG("Received WPM write: %d", wpm_value);
+    wpm_value = data[0];  // Byte 0: WPM
+    memcpy(&total_keystrokes, &data[1], 4);  // Bytes 1-4: total_keystrokes (uint32_t)
+    
+    LOG_DBG("Received WPM write: WPM=%d, Total keystrokes=%d", wpm_value, total_keystrokes);
 
     k_work_submit(&split_svc_wpm_work);
 
@@ -236,11 +253,11 @@ BT_GATT_SERVICE_DEFINE(
                            BT_GATT_PERM_WRITE_ENCRYPT | BT_GATT_PERM_READ_ENCRYPT,
                            split_svc_get_selected_phys_layout, split_svc_select_phys_layout,
                            NULL),
-    // ← THÊM WPM CHARACTERISTIC
+    // ← WPM CHARACTERISTIC (nhận 5 bytes)
     BT_GATT_CHARACTERISTIC(BT_UUID_DECLARE_128(ZMK_SPLIT_BT_CHAR_WPM_UUID),
                            BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                            BT_GATT_PERM_WRITE_ENCRYPT,
-                           NULL, split_svc_receive_wpm, &wpm_value), );
+                           NULL, split_svc_receive_wpm, NULL), );
 
 K_THREAD_STACK_DEFINE(service_q_stack, CONFIG_ZMK_SPLIT_BLE_PERIPHERAL_STACK_SIZE);
 
