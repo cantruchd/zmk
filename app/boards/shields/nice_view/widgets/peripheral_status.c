@@ -41,6 +41,8 @@ struct wpm_status_state {
 static uint8_t max_wpm = 0;
 static uint32_t avg_wpm_sum = 0;
 static uint16_t avg_wpm_count = 0;
+static uint32_t total_keystrokes = 0;
+
 
 // === Helper functions ===
 
@@ -70,7 +72,7 @@ static void draw_wpm_graph(lv_obj_t *canvas, uint8_t *values) {
 
     
     char text_small[16];
-    snprintf(text_small, sizeof(text_small), "%d", avg_wpm_sum);
+    snprintf(text_small, sizeof(text_small), "%d", total_keystrokes);
     lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &right_text_small, text_small);
 
     // === VẼ MAX WPM Ở TRÊN CÙNG ===
@@ -276,7 +278,11 @@ static void set_wpm_status(struct zmk_widget_status *widget, struct wpm_status_s
     }
 
     // Cập nhật average (chỉ tính WPM > 0)
-    if (state.wpm > 0) {
+    if (state.total_keystrokes > 0) {
+        total_keystrokes += state.total_keystrokes;        
+    }
+
+    if (state.total > 0) {
         avg_wpm_sum += state.wpm;
         avg_wpm_count++;
     }
