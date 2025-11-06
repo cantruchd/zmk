@@ -283,7 +283,7 @@ static void set_wpm_status(struct zmk_widget_status *widget, struct wpm_status_s
         total_keystrokes += state.total_keystrokes;        
     }
 
-    if (state.total > 0) {
+    if (state.wpm > 0) {
         avg_wpm_sum += state.wpm;
         avg_wpm_count++;
     }
