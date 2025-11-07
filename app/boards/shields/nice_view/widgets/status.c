@@ -145,7 +145,7 @@ static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status
 
 
     // Fill background
-    lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, 84, &rect_black_dsc);
+    lv_canvas_draw_rect(canvas, 0, 0, 84, 84, &rect_black_dsc);
 
 
     // Draw battery percentage
