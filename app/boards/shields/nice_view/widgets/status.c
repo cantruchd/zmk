@@ -146,17 +146,12 @@ static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status
     // Fill background
     lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &rect_black_dsc);
 
-    // lv_draw_label_dsc_t label_dsc_battery;
-    // init_label_dsc(&label_dsc_battery, LVGL_FOREGROUND, &lv_font_montserrat_26, LV_TEXT_ALIGN_CENTER);
-    // // Draw battery percentage
-    // char battery_text[5] = {};
-    // snprintf(battery_text, sizeof(battery_text), "%d%%", state->battery);
-    // lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc_battery, battery_text);
+
 
     // Draw circles
     int circle_offsets[NICEVIEW_PROFILE_COUNT][2] = {
-      //  {13, 13}, {55, 13}, {34, 34}, {13, 55}, {55, 55},
-        {13, 25}, {55, 25}, {34, 40}, {13, 55}, {55, 55},
+      //  {13, 13}, {55, 13}, {34, 34}, {13, 55}, {55, 55},        
+        {13, 13}, {55, 13}, {34, 28}, {13, 43}, {55, 43},
     };
 
     for (int i = 0; i < NICEVIEW_PROFILE_COUNT; i++) {
@@ -211,6 +206,14 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
         lv_canvas_draw_text(canvas, 6, 0, 68, &label_dsc, state->layer_label);
     }
 
+    // draw battery
+    lv_draw_label_dsc_t label_dsc_battery;
+    init_label_dsc(&label_dsc_battery, LVGL_FOREGROUND, &lv_font_montserrat_26, LV_TEXT_ALIGN_CENTER);
+    // Draw battery percentage
+    char battery_text[5] = {};
+    snprintf(battery_text, sizeof(battery_text), "%d%%", state->battery);
+    lv_canvas_draw_text(canvas, 23, 0, 68, &label_dsc_battery, battery_text);
+    
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
 }
@@ -350,7 +353,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_align(middle, LV_ALIGN_TOP_RIGHT, -68, 0);//easier to align
     lv_canvas_set_buffer(middle, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
     lv_obj_t *bottom = lv_canvas_create(widget->obj);
-    lv_obj_align(bottom, LV_ALIGN_TOP_LEFT, -60, 0); //-44-16
+    lv_obj_align(bottom, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_canvas_set_buffer(bottom, widget->cbuf3, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     sys_slist_append(&widgets, &widget->node);
