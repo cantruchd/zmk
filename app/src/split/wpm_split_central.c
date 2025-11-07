@@ -6,7 +6,6 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include <zmk/event_manager.h>
@@ -17,7 +16,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #if IS_ENABLED(CONFIG_ZMK_SPLIT)
 
 // ============================================================================
-// CENTRAL: Gửi WPM tới peripherals
+// CENTRAL: Gửi WPM + Total Keystrokes tới peripherals
 // ============================================================================
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
 
@@ -43,19 +42,16 @@ ZMK_SUBSCRIPTION(wpm_split_central, zmk_wpm_state_changed);
 #endif // IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
 
 // ============================================================================
-// PERIPHERAL: Nhận WPM từ central (nếu cần xử lý thêm)
+// PERIPHERAL: Nhận WPM + Total Keystrokes từ central
 // ============================================================================
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_PERIPHERAL)
-
-// Event zmk_split_wpm_state_changed đã được raise trong central.c
-// Peripheral widget sẽ subscribe trực tiếp vào event này
-// File này chỉ cần tồn tại để compile, không cần xử lý gì thêm
 
 static int wpm_split_peripheral_listener(const zmk_event_t *eh) {
     const struct zmk_split_wpm_state_changed *ev = as_zmk_split_wpm_state_changed(eh);
     
     if (ev) {
-        LOG_INF("Peripheral received WPM from central: %d", ev->wpm);
+        LOG_INF("Peripheral received - WPM: %d, Total Keystrokes: %d", 
+                ev->wpm, ev->total_keystrokes);
     }
     
     return ZMK_EV_EVENT_BUBBLE;
