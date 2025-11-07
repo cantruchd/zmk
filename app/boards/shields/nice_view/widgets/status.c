@@ -195,9 +195,9 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
 
         sprintf(text, "LAYER %i", state->layer_index);
 
-        lv_canvas_draw_text(canvas, 0, 5, 68, &label_dsc, text);
+        lv_canvas_draw_text(canvas, 6, 5, 68, &label_dsc, text);
     } else {
-        lv_canvas_draw_text(canvas, 0, 5, 68, &label_dsc, state->layer_label);
+        lv_canvas_draw_text(canvas, 6, 5, 68, &label_dsc, state->layer_label);
     }
 
     // Rotate canvas
