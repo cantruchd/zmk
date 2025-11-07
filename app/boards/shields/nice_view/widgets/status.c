@@ -145,7 +145,7 @@ static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status
 
 
     // Fill background
-    lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE+16, CANVAS_SIZE, &rect_black_dsc);
+    lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, 84, &rect_black_dsc);
 
 
     // Draw battery percentage
@@ -156,7 +156,7 @@ static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status
     // Draw circles
     int circle_offsets[NICEVIEW_PROFILE_COUNT][2] = {
       //  {13, 13}, {55, 13}, {34, 34}, {13, 55}, {55, 55},
-        {13, 13+12}, {55, 13+12}, {34, 34+6}, {13, 55}, {55, 55},
+        {13, 25}, {55, 25}, {34, 40}, {13, 55}, {55, 55},
     };
 
     for (int i = 0; i < NICEVIEW_PROFILE_COUNT; i++) {
