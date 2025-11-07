@@ -140,18 +140,18 @@ static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status
     lv_draw_label_dsc_t label_dsc_black;
     init_label_dsc(&label_dsc_black, LVGL_BACKGROUND, &lv_font_montserrat_18, LV_TEXT_ALIGN_CENTER);
     
-    lv_draw_label_dsc_t label_dsc_battery;
-    init_label_dsc(&label_dsc_battery, LVGL_FOREGROUND, &lv_font_montserrat_26, LV_TEXT_ALIGN_CENTER);
+  
 
 
     // Fill background
-    lv_canvas_draw_rect(canvas, 0, 0, 84, CANVAS_SIZE, &rect_black_dsc);
+    lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &rect_black_dsc);
 
-
-    // Draw battery percentage
-    char battery_text[5] = {};
-    snprintf(battery_text, sizeof(battery_text), "%d%%", state->battery);
-    lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc_battery, battery_text);
+    // lv_draw_label_dsc_t label_dsc_battery;
+    // init_label_dsc(&label_dsc_battery, LVGL_FOREGROUND, &lv_font_montserrat_26, LV_TEXT_ALIGN_CENTER);
+    // // Draw battery percentage
+    // char battery_text[5] = {};
+    // snprintf(battery_text, sizeof(battery_text), "%d%%", state->battery);
+    // lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc_battery, battery_text);
 
     // Draw circles
     int circle_offsets[NICEVIEW_PROFILE_COUNT][2] = {
@@ -348,7 +348,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
     lv_obj_t *middle = lv_canvas_create(widget->obj);
     lv_obj_align(middle, LV_ALIGN_TOP_LEFT, 8, 0);//24-16
-    lv_canvas_set_buffer(middle, widget->cbuf2, 84, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
+    lv_canvas_set_buffer(middle, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
     lv_obj_t *bottom = lv_canvas_create(widget->obj);
     lv_obj_align(bottom, LV_ALIGN_TOP_LEFT, -60, 0); //-44-16
     lv_canvas_set_buffer(bottom, widget->cbuf3, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
