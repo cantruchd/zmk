@@ -50,6 +50,13 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &label_dsc,
                         state->connected ? LV_SYMBOL_WIFI : LV_SYMBOL_CLOSE);
 
+    lv_draw_label_dsc_t label_dsc_battery;
+    init_label_dsc(&label_dsc_battery, LVGL_FOREGROUND, &lv_font_montserrat_26, LV_TEXT_ALIGN_CENTER);
+    // Draw battery percentage
+    char battery_text[5] = {};
+    snprintf(battery_text, sizeof(battery_text), "%d%%", state->battery);
+    lv_canvas_draw_text(canvas, 0, 20, 68, &label_dsc_battery, battery_text);
+
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
 }
@@ -117,7 +124,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_t *art = lv_img_create(widget->obj);
     bool random = sys_rand32_get() & 1;
     lv_img_set_src(art, random ? &balloon : &mountain);
-    lv_obj_align(art, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_align(art, LV_ALIGN_TOP_LEFT, 0, -22);
 
     sys_slist_append(&widgets, &widget->node);
     widget_battery_status_init();
