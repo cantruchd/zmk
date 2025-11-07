@@ -139,9 +139,19 @@ static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status
     init_label_dsc(&label_dsc, LVGL_FOREGROUND, &lv_font_montserrat_18, LV_TEXT_ALIGN_CENTER);
     lv_draw_label_dsc_t label_dsc_black;
     init_label_dsc(&label_dsc_black, LVGL_BACKGROUND, &lv_font_montserrat_18, LV_TEXT_ALIGN_CENTER);
+    
+    lv_draw_label_dsc_t label_dsc_battery;
+    init_label_dsc(&label_dsc_battery, LVGL_FOREGROUND, &lv_font_montserrat_26, LV_TEXT_ALIGN_CENTER);
+
 
     // Fill background
     lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE+16, CANVAS_SIZE, &rect_black_dsc);
+
+
+    // Draw battery percentage
+    char battery_text[5] = {};
+    snprintf(battery_text, sizeof(battery_text), "%d%%", state->battery);
+    lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc_battery, battery_text);
 
     // Draw circles
     int circle_offsets[NICEVIEW_PROFILE_COUNT][2] = {
