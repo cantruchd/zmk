@@ -201,9 +201,9 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
 
         sprintf(text, "LAYER %i", state->layer_index);
 
-        lv_canvas_draw_text(canvas, 6, 0, 68, &label_dsc, text);
+        lv_canvas_draw_text(canvas, 0, 28, 68, &label_dsc, text);
     } else {
-        lv_canvas_draw_text(canvas, 6, 0, 68, &label_dsc, state->layer_label);
+        lv_canvas_draw_text(canvas, 0, 28, 68, &label_dsc, state->layer_label);
     }
 
     // draw battery
@@ -212,7 +212,7 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status
     // Draw battery percentage
     char battery_text[5] = {};
     snprintf(battery_text, sizeof(battery_text), "%d%%", state->battery);
-    lv_canvas_draw_text(canvas, 23, 0, 68, &label_dsc_battery, battery_text);
+    lv_canvas_draw_text(canvas, 0, 0, 68, &label_dsc_battery, battery_text);
     
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
