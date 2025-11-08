@@ -108,7 +108,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
 
     char wpm_text[6] = {};
     snprintf(wpm_text, sizeof(wpm_text), "%d", max);
-    lv_canvas_draw_text(canvas, 21, 23, 48, &label_dsc_wpm, wpm_text);
+    lv_canvas_draw_text(canvas, 18, 23, 48, &label_dsc_wpm, wpm_text);
     
     int range = max - min;
     if (range == 0) {
@@ -229,6 +229,8 @@ static void set_battery_status(struct zmk_widget_status *widget,
     widget->state.battery = state.level;
 
     draw_top(widget->obj, widget->cbuf, &widget->state);
+
+    draw_bottom(widget->obj, widget->cbuf3, &widget->state);
 }
 
 static void battery_status_update_cb(struct battery_status_state state) {
