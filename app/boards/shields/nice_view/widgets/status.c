@@ -46,6 +46,9 @@ struct wpm_status_state {
     uint8_t wpm;
 };
 
+int max = 0;
+int min = 256;
+
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 0);
 
@@ -94,8 +97,8 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
 
     
 
-    int max = 0;
-    int min = 256;
+    // int max = 0;
+    // int min = 256;
 
     for (int i = 0; i < 10; i++) {
         if (state->wpm[i] > max) {
