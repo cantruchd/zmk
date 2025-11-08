@@ -108,7 +108,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     // Display max WPM in top right corner
     char wpm_text[6] = {};
     snprintf(wpm_text, sizeof(wpm_text), "%d", max);
-    lv_canvas_draw_text(canvas, 42, 23, 24, &label_dsc_wpm, wpm_text);
+    lv_canvas_draw_text(canvas, 42, 23, 68, &label_dsc_wpm, wpm_text);
 
     // Draw dashed lines for 25%, 50%, 75%
     lv_draw_line_dsc_t line_dsc_dashed;
@@ -122,17 +122,17 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     }
 
     // 75% line
-    int y_75 = 65 - (int)((range * 0.75) * 40 / range);
+    int y_75 = 60 - (int)((range * 0.75) * 36 / range);
     lv_point_t line_75[2] = {{2, y_75}, {66, y_75}};
     lv_canvas_draw_line(canvas, line_75, 2, &line_dsc_dashed);
 
     // 50% line
-    int y_50 = 65 - (int)((range * 0.5) * 40 / range);
+    int y_50 = 60 - (int)((range * 0.5) * 36 / range);
     lv_point_t line_50[2] = {{2, y_50}, {66, y_50}};
     lv_canvas_draw_line(canvas, line_50, 2, &line_dsc_dashed);
 
     // 25% line
-    int y_25 = 65 - (int)((range * 0.25) * 40 / range);
+    int y_25 = 60 - (int)((range * 0.25) * 36 / range);
     lv_point_t line_25[2] = {{2, y_25}, {66, y_25}};
     lv_canvas_draw_line(canvas, line_25, 2, &line_dsc_dashed);
 
