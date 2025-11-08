@@ -92,9 +92,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     lv_canvas_draw_rect(canvas, 0, 21, 68, 42, &rect_white_dsc);
     lv_canvas_draw_rect(canvas, 1, 22, 66, 40, &rect_black_dsc);
 
-    char wpm_text[6] = {};
-    snprintf(wpm_text, sizeof(wpm_text), "%d", state->wpm[9]);
-    lv_canvas_draw_text(canvas, 21, 36, 48, &label_dsc_wpm, wpm_text);
+    
 
     int max = 0;
     int min = 256;
@@ -108,6 +106,10 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
         }
     }
 
+    char wpm_text[6] = {};
+    snprintf(wpm_text, sizeof(wpm_text), "%d", max);
+    lv_canvas_draw_text(canvas, 21, 36, 48, &label_dsc_wpm, wpm_text);
+    
     int range = max - min;
     if (range == 0) {
         range = 1;
