@@ -89,13 +89,11 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     lv_canvas_draw_text(canvas, 0, 0, CANVAS_SIZE, &label_dsc, output_text);
 
     // Draw WPM
-    lv_canvas_draw_rect(canvas, 0, 21, 68, 42, &rect_white_dsc);
-    lv_canvas_draw_rect(canvas, 1, 22, 66, 40, &rect_black_dsc);
+    // Draw WPM box - no gap below
+    lv_canvas_draw_rect(canvas, 0, 21, 68, 47, &rect_white_dsc);
+    lv_canvas_draw_rect(canvas, 1, 22, 66, 45, &rect_black_dsc);
 
-    char wpm_text[6] = {};
-    snprintf(wpm_text, sizeof(wpm_text), "%d", state->wpm[9]);
-    lv_canvas_draw_text(canvas, 42, 52, 24, &label_dsc_wpm, wpm_text);
-
+    // Find max WPM
     int max = 0;
     int min = 256;
 
@@ -108,15 +106,42 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
         }
     }
 
+    // Display max WPM in top right corner
+    char wpm_text[6] = {};
+    snprintf(wpm_text, sizeof(wpm_text), "%d", max);
+    lv_canvas_draw_text(canvas, 42, 23, 24, &label_dsc_wpm, wpm_text);
+
+    // Draw dashed lines for 25%, 50%, 75%
+    lv_draw_line_dsc_t line_dsc_dashed;
+    init_line_dsc(&line_dsc_dashed, LVGL_FOREGROUND, 1);
+    line_dsc_dashed.dash_width = 2;
+    line_dsc_dashed.dash_gap = 2;
+
     int range = max - min;
     if (range == 0) {
         range = 1;
     }
 
+    // 75% line
+    int y_75 = 65 - (int)((range * 0.75) * 40 / range);
+    lv_point_t line_75[2] = {{2, y_75}, {66, y_75}};
+    lv_canvas_draw_line(canvas, line_75, 2, &line_dsc_dashed);
+
+    // 50% line
+    int y_50 = 65 - (int)((range * 0.5) * 40 / range);
+    lv_point_t line_50[2] = {{2, y_50}, {66, y_50}};
+    lv_canvas_draw_line(canvas, line_50, 2, &line_dsc_dashed);
+
+    // 25% line
+    int y_25 = 65 - (int)((range * 0.25) * 40 / range);
+    lv_point_t line_25[2] = {{2, y_25}, {66, y_25}};
+    lv_canvas_draw_line(canvas, line_25, 2, &line_dsc_dashed);
+
+    // Draw WPM graph
     lv_point_t points[10];
     for (int i = 0; i < 10; i++) {
         points[i].x = 2 + i * 7;
-        points[i].y = 60 - (state->wpm[i] - min) * 36 / range;
+        points[i].y = 65 - (state->wpm[i] - min) * 40 / range;
     }
     lv_canvas_draw_line(canvas, points, 10, &line_dsc);
 
