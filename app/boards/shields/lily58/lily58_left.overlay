@@ -20,3 +20,36 @@
 &left_encoder {
     status = "okay";
 };
+
+
+/ {
+    behaviors {
+        hw_soft_off: hw_soft_off {
+            compatible = "zmk,behavior-soft-off";
+            #binding-cells = <0>;
+        };
+    };
+
+    soft_off_direct_kscan: soft_off_direct_kscan {
+        compatible = "zmk,kscan-gpio-direct";
+        input-keys = <&button0>;
+        wakeup-source;
+    };
+
+    soft_off_sideband_behaviors {
+        compatible = "zmk,kscan-sideband-behaviors";
+        kscan = <&soft_off_direct_kscan>;
+        soft_off {
+            row = <0>;
+            column = <0>;
+            bindings = <&hw_soft_off>;
+        };
+    };
+
+    soft_off_wakers {
+        compatible = "zmk,soft-off-wakeup-sources";
+        status = "okay";
+
+        wakeup-sources = <&soft_off_direct_kscan>;
+    };
+};
