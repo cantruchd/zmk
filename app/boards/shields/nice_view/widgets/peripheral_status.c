@@ -55,7 +55,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
     // Draw battery percentage
     char battery_text[5] = {};
     snprintf(battery_text, sizeof(battery_text), "%d%%", state->battery);
-    lv_canvas_draw_text(canvas, -68, 20, 68, &label_dsc_battery, battery_text);
+    lv_canvas_draw_text(canvas, 68, 20, 68, &label_dsc_battery, battery_text);
 
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
