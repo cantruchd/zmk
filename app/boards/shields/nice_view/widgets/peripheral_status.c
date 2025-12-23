@@ -5,7 +5,7 @@
  *
  */
 
-include <zephyr/kernel.h>
+#include <zephyr/kernel.h>
 #include <zephyr/random/random.h>
 
 #include <zephyr/logging/log.h>
